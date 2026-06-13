@@ -18,6 +18,11 @@ export const useViewStore = create(
       // Whether dot files (names starting with '.') are shown.
       showHidden: false,
       toggleHidden: () => set((s) => ({ showHidden: !s.showHidden })),
+
+      // Thumbnail/icon zoom factor (Ctrl+wheel). Clamped to a sane range.
+      zoom: 1,
+      zoomBy: (delta) =>
+        set((s) => ({ zoom: Math.min(2, Math.max(0.6, +(s.zoom + delta).toFixed(2))) })),
     }),
     { name: 'app-view' },
   ),

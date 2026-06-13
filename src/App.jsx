@@ -7,7 +7,6 @@ import {
   Group,
   Loader,
   ScrollArea,
-  SimpleGrid,
   SegmentedControl,
   Text,
   TextInput,
@@ -197,10 +196,13 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-function EntryRow({ entry, editing, pinned, compact, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
+  const base = compact ? 24 : 32
+  const thumbSize = Math.round(base * zoom)
+  const thumbIcon = Math.round((compact ? 14 : 18) * zoom)
 
   return (
     <Flex
@@ -218,7 +220,7 @@ function EntryRow({ entry, editing, pinned, compact, onOpen, onOpenFile, onStart
         background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
-      <Thumb entry={entry} size={compact ? 24 : 32} iconSize={compact ? 14 : 18} />
+      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} />
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
@@ -268,10 +270,11 @@ function EntryRow({ entry, editing, pinned, compact, onOpen, onOpenFile, onStart
   )
 }
 
-function EntryTile({ entry, editing, pinned, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+function EntryTile({ entry, editing, pinned, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
+  const thumbSize = Math.round(64 * zoom)
 
   return (
     <Flex
@@ -308,7 +311,7 @@ function EntryTile({ entry, editing, pinned, onOpen, onOpenFile, onStartEdit, on
         </ActionIcon>
       </Group>
 
-      <Thumb entry={entry} size={64} iconSize={32} />
+      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} />
 
       <Box w="100%" style={{ textAlign: 'center' }}>
         {editing ? (
@@ -364,11 +367,14 @@ export default function App() {
   const [creating, setCreating] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const resetRef = useRef(null)
+  const contentRef = useRef(null)
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
   const showHidden = useViewStore((s) => s.showHidden)
   const toggleHidden = useViewStore((s) => s.toggleHidden)
+  const zoom = useViewStore((s) => s.zoom)
+  const zoomBy = useViewStore((s) => s.zoomBy)
   const openPreview = usePreviewStore((s) => s.open)
   const openContextMenu = useContextMenuStore((s) => s.open)
 
@@ -414,6 +420,20 @@ export default function App() {
       await Promise.all([load(''), loadFavorites(), loadPlaces()])
     })()
   }, [load, loadFavorites, loadPlaces])
+
+  // Ctrl+wheel zooms thumbnails. A native non-passive listener is required so we
+  // can preventDefault and stop Chromium's built-in page zoom.
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    const onWheel = (e) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      zoomBy(e.deltaY < 0 ? 0.1 : -0.1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [zoomBy])
 
   const entries = (listing?.entries ?? []).filter(
     (e) => showHidden || !e.name.startsWith('.'),
@@ -520,6 +540,7 @@ export default function App() {
     entry,
     editing: editingPath === entry.path,
     pinned: favSet.has(entry.path),
+    zoom,
     onOpen: (e) => load(e.path),
     onOpenFile: (e) => openPreview(e),
     onStartEdit: setEditingPath,
@@ -589,6 +610,7 @@ export default function App() {
 
       {/* Main */}
       <Flex
+        ref={contentRef}
         direction="column"
         style={{ flex: 1, minWidth: 0, outline: dragOver ? '2px dashed var(--mantine-color-blue-5)' : 'none', outlineOffset: -8 }}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -659,11 +681,17 @@ export default function App() {
             <Center h={240}><Loader size="sm" /></Center>
           ) : mode === 'grid' ? (
             <Box p="md">
-              <SimpleGrid cols={{ base: 3, xs: 4, sm: 6, md: 8 }} spacing="xs" verticalSpacing="md">
+              <Box
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(92 * zoom)}px, 1fr))`,
+                  gap: 12,
+                }}
+              >
                 {creating && (
                   <Flex direction="column" align="center" gap={8} p="sm">
-                    <ThemeIcon variant="light" color="yellow" size={56} radius="md">
-                      <IconFolder size={30} />
+                    <ThemeIcon variant="light" color="yellow" size={Math.round(64 * zoom)} radius="md">
+                      <IconFolder size={Math.round(32 * zoom)} />
                     </ThemeIcon>
                     {createInput}
                   </Flex>
@@ -671,7 +699,7 @@ export default function App() {
                 {entries.map((entry) => (
                   <EntryTile key={entry.path} {...entryProps(entry)} />
                 ))}
-              </SimpleGrid>
+              </Box>
               {entries.length === 0 && !creating && emptyState}
             </Box>
           ) : (
