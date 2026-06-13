@@ -59,7 +59,7 @@ import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
 import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
-import { TagDots } from './components/TagManagerModal.jsx'
+import { TagChips } from './components/TagManagerModal.jsx'
 import { SidebarTagTree } from './components/SidebarTagTree.jsx'
 
 // Shared empty array keeps untagged rows' `tags` prop referentially stable.
@@ -224,7 +224,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
         )}
       </Box>
 
-      <TagDots tags={tags} />
+      <TagChips tags={tags} />
 
       <Text size="xs" c="dimmed" w={70} ta="right">
         {isDir ? '' : formatBytes(entry.size)}
@@ -325,8 +325,8 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, ta
         )}
       </Box>
       {tags?.length > 0 && (
-        <Group justify="center">
-          <TagDots tags={tags} />
+        <Group justify="center" style={{ maxWidth: '100%' }}>
+          <TagChips tags={tags} max={2} />
         </Group>
       )}
     </Flex>

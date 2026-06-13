@@ -9,7 +9,7 @@ import {
   Select,
   Button,
   ActionIcon,
-  ColorSwatch,
+  Badge,
   Center,
 } from '@mantine/core'
 import { IconTrash, IconTags } from '@tabler/icons-react'
@@ -190,13 +190,25 @@ export function TagManagerModal() {
   )
 }
 
-/** Small coloured dots shown on entries to indicate their tags. */
-export function TagDots({ tags, max = 4 }) {
+/** Coloured name chips shown on entries to indicate their tags. */
+export function TagChips({ tags, max = 3 }) {
   if (!tags?.length) return null
   return (
-    <Group gap={3} wrap="nowrap">
+    <Group gap={4} wrap="nowrap">
       {tags.slice(0, max).map((t) => (
-        <ColorSwatch key={t.id} color={t.color} size={8} title={t.name} />
+        <Badge
+          key={t.id}
+          size="xs"
+          variant="light"
+          color={t.color}
+          title={t.name}
+          styles={{
+            root: { maxWidth: 110, textTransform: 'none', fontWeight: 500 },
+            label: { overflow: 'hidden', textOverflow: 'ellipsis' },
+          }}
+        >
+          {t.name}
+        </Badge>
       ))}
       {tags.length > max && (
         <Text size="xs" c="dimmed">
