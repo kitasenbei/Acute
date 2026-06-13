@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react'
 import {
   Box,
   Center,
@@ -180,7 +180,7 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-function EntryRow({ entry, editing, pinned, compact, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -225,36 +225,42 @@ function EntryRow({ entry, editing, pinned, compact, zoom = 1, scrolling, onOpen
         </Text>
       )}
 
-      <Group gap={2} w={118} justify="flex-end" style={{ opacity: hover ? 1 : 0 }}>
-        {isDir ? (
-          <Tooltip label={pinned ? 'Unpin' : 'Pin'} openDelay={400}>
-            <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} onClick={() => onTogglePin(entry)}>
-              {pinned ? <IconStarFilled size={15} /> : <IconStar size={15} />}
-            </ActionIcon>
-          </Tooltip>
-        ) : (
-          <Tooltip label="Open" openDelay={400}>
-            <ActionIcon variant="subtle" color="gray" onClick={() => onOpenFile(entry)}>
-              <IconEye size={16} />
+      {/* Actions mount only on hover — keeps non-hovered (and scrolling) rows light. */}
+      <Group gap={2} w={118} justify="flex-end">
+        {hover &&
+          (isDir ? (
+            <Tooltip label={pinned ? 'Unpin' : 'Pin'} openDelay={400}>
+              <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} onClick={() => onTogglePin(entry)}>
+                {pinned ? <IconStarFilled size={15} /> : <IconStar size={15} />}
+              </ActionIcon>
+            </Tooltip>
+          ) : (
+            <Tooltip label="Open" openDelay={400}>
+              <ActionIcon variant="subtle" color="gray" onClick={() => onOpenFile(entry)}>
+                <IconEye size={16} />
+              </ActionIcon>
+            </Tooltip>
+          ))}
+        {hover && (
+          <Tooltip label="Rename" openDelay={400}>
+            <ActionIcon variant="subtle" color="gray" onClick={() => onStartEdit(entry.path)}>
+              <IconPencil size={16} />
             </ActionIcon>
           </Tooltip>
         )}
-        <Tooltip label="Rename" openDelay={400}>
-          <ActionIcon variant="subtle" color="gray" onClick={() => onStartEdit(entry.path)}>
-            <IconPencil size={16} />
-          </ActionIcon>
-        </Tooltip>
-        <Tooltip label="Delete" openDelay={400}>
-          <ActionIcon variant="subtle" color="red" onClick={() => onDelete(entry)}>
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Tooltip>
+        {hover && (
+          <Tooltip label="Delete" openDelay={400}>
+            <ActionIcon variant="subtle" color="red" onClick={() => onDelete(entry)}>
+              <IconTrash size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
       </Group>
     </Flex>
   )
-}
+})
 
-function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -277,23 +283,25 @@ function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpen
         background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
-      <Group gap={2} style={{ position: 'absolute', top: 4, right: 4, opacity: hover ? 1 : 0 }}>
-        {isDir ? (
-          <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} size="sm" onClick={() => onTogglePin(entry)}>
-            {pinned ? <IconStarFilled size={14} /> : <IconStar size={14} />}
+      {hover && (
+        <Group gap={2} style={{ position: 'absolute', top: 4, right: 4 }}>
+          {isDir ? (
+            <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} size="sm" onClick={() => onTogglePin(entry)}>
+              {pinned ? <IconStarFilled size={14} /> : <IconStar size={14} />}
+            </ActionIcon>
+          ) : (
+            <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onOpenFile(entry)}>
+              <IconEye size={14} />
+            </ActionIcon>
+          )}
+          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onStartEdit(entry.path)}>
+            <IconPencil size={14} />
           </ActionIcon>
-        ) : (
-          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onOpenFile(entry)}>
-            <IconEye size={14} />
+          <ActionIcon variant="subtle" color="red" size="sm" onClick={() => onDelete(entry)}>
+            <IconTrash size={14} />
           </ActionIcon>
-        )}
-        <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onStartEdit(entry.path)}>
-          <IconPencil size={14} />
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="red" size="sm" onClick={() => onDelete(entry)}>
-          <IconTrash size={14} />
-        </ActionIcon>
-      </Group>
+        </Group>
+      )}
 
       <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} scrolling={scrolling} />
 
@@ -308,7 +316,7 @@ function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpen
       </Box>
     </Flex>
   )
-}
+})
 
 function SidebarItem({ icon: Icon, label, active, onClick, onUnpin }) {
   const [hover, setHover] = useState(false)
@@ -426,51 +434,69 @@ export default function App() {
   )
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
 
-  async function run(fn) {
-    try {
-      await fn()
-      await load(path, { silent: true })
-    } catch (e) {
-      setError(e.message)
-    }
-  }
+  const run = useCallback(
+    async (fn) => {
+      try {
+        await fn()
+        await load(path, { silent: true })
+      } catch (e) {
+        setError(e.message)
+      }
+    },
+    [load, path],
+  )
 
-  const uploadAll = (fileList) =>
-    run(async () => {
-      await Promise.all(Array.from(fileList || []).map((f) => api.upload(path, f)))
-      resetRef.current?.()
-    })
+  const uploadAll = useCallback(
+    (fileList) =>
+      run(async () => {
+        await Promise.all(Array.from(fileList || []).map((f) => api.upload(path, f)))
+        resetRef.current?.()
+      }),
+    [run, path],
+  )
 
-  const commitRename = (entry, value) => {
-    setEditingPath(null)
-    const name = value.trim()
-    if (!name || name === entry.name) return
-    run(() => api.rename(entry.path, name))
-  }
+  const commitRename = useCallback(
+    (entry, value) => {
+      setEditingPath(null)
+      const name = value.trim()
+      if (!name || name === entry.name) return
+      run(() => api.rename(entry.path, name))
+    },
+    [run],
+  )
 
-  const commitCreate = (value) => {
-    setCreating(false)
-    const name = value.trim()
-    if (!name) return
-    run(() => api.createFolder(path, name))
-  }
+  const commitCreate = useCallback(
+    (value) => {
+      setCreating(false)
+      const name = value.trim()
+      if (!name) return
+      run(() => api.createFolder(path, name))
+    },
+    [run, path],
+  )
 
-  const togglePin = (entry) =>
-    run(async () => {
-      if (favSet.has(entry.path)) await api.favorites.remove(entry.path)
-      else await api.favorites.add(entry.path)
-      await loadFavorites()
-    })
+  const togglePin = useCallback(
+    (entry) =>
+      run(async () => {
+        if (favSet.has(entry.path)) await api.favorites.remove(entry.path)
+        else await api.favorites.add(entry.path)
+        await loadFavorites()
+      }),
+    [run, favSet, loadFavorites],
+  )
 
-  const unpin = (favPath) =>
-    run(async () => {
-      await api.favorites.remove(favPath)
-      await loadFavorites()
-    })
+  const unpin = useCallback(
+    (favPath) =>
+      run(async () => {
+        await api.favorites.remove(favPath)
+        await loadFavorites()
+      }),
+    [run, loadFavorites],
+  )
 
   // Build the right-click action list for an entry. Files and folders differ;
   // native actions only appear when running inside Electron.
-  const buildMenuItems = (entry) => {
+  const buildMenuItems = useCallback((entry) => {
     const isDir = entry.type === 'dir'
     const items = []
 
@@ -519,7 +545,20 @@ export default function App() {
       onClick: () => run(() => api.remove(entry.path)),
     })
     return items
-  }
+  }, [load, openPreview, favSet, togglePin, run])
+
+  // Stable handler references so memoized rows don't re-render while scrolling.
+  const handleOpen = useCallback((e) => load(e.path), [load])
+  const handleOpenFile = useCallback((e) => openPreview(e), [openPreview])
+  const handleCancelEdit = useCallback(() => setEditingPath(null), [])
+  const handleDelete = useCallback((e) => run(() => api.remove(e.path)), [run])
+  const handleContextMenu = useCallback(
+    (e, ev) => {
+      ev.preventDefault()
+      openContextMenu(ev.clientX, ev.clientY, buildMenuItems(e))
+    },
+    [openContextMenu, buildMenuItems],
+  )
 
   // Props shared by every view mode (key is passed explicitly at the call site).
   const entryProps = (entry) => ({
@@ -527,17 +566,14 @@ export default function App() {
     editing: editingPath === entry.path,
     pinned: favSet.has(entry.path),
     zoom,
-    onOpen: (e) => load(e.path),
-    onOpenFile: (e) => openPreview(e),
+    onOpen: handleOpen,
+    onOpenFile: handleOpenFile,
     onStartEdit: setEditingPath,
     onCommitEdit: commitRename,
-    onCancelEdit: () => setEditingPath(null),
-    onDelete: (e) => run(() => api.remove(e.path)),
+    onCancelEdit: handleCancelEdit,
+    onDelete: handleDelete,
     onTogglePin: togglePin,
-    onContextMenu: (e, ev) => {
-      ev.preventDefault()
-      openContextMenu(ev.clientX, ev.clientY, buildMenuItems(e))
-    },
+    onContextMenu: handleContextMenu,
   })
 
   // Renders one entry for the virtualizer, picking row vs. tile by view mode.
