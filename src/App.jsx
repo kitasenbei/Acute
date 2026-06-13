@@ -93,12 +93,12 @@ const thumbBox = (size) => ({
 
 /** A square preview: a real thumbnail for image/video files, otherwise the
  * type icon. Falls back to the icon if the media fails to load. */
-function Thumb({ entry, size, iconSize }) {
+function Thumb({ entry, size, iconSize, scrolling }) {
   const { Icon, color } = iconForEntry(entry)
   const [failed, setFailed] = useState(false)
   const kind = fileKind(entry)
 
-  if (!failed && kind === 'image') {
+  if (!scrolling && !failed && kind === 'image') {
     return (
       <Box style={thumbBox(size)}>
         <img
@@ -112,7 +112,7 @@ function Thumb({ entry, size, iconSize }) {
     )
   }
 
-  if (!failed && kind === 'video') {
+  if (!scrolling && !failed && kind === 'video') {
     return (
       <Box style={thumbBox(size)}>
         <video
@@ -196,7 +196,7 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+function EntryRow({ entry, editing, pinned, compact, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -220,7 +220,7 @@ function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFil
         background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
-      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} />
+      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} scrolling={scrolling} />
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
@@ -270,7 +270,7 @@ function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFil
   )
 }
 
-function EntryTile({ entry, editing, pinned, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -311,7 +311,7 @@ function EntryTile({ entry, editing, pinned, zoom = 1, onOpen, onOpenFile, onSta
         </ActionIcon>
       </Group>
 
-      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} />
+      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} scrolling={scrolling} />
 
       <Box w="100%" style={{ textAlign: 'center' }}>
         {editing ? (
@@ -557,11 +557,12 @@ export default function App() {
   })
 
   // Renders one entry for the virtualizer, picking row vs. tile by view mode.
-  const renderEntry = (entry) =>
+  // `scrolling` defers thumbnail loading while the list is in motion.
+  const renderEntry = (entry, scrolling) =>
     mode === 'grid' ? (
-      <EntryTile key={entry.path} {...entryProps(entry)} />
+      <EntryTile key={entry.path} {...entryProps(entry)} scrolling={scrolling} />
     ) : (
-      <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} />
+      <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} scrolling={scrolling} />
     )
 
   const createInput = (
