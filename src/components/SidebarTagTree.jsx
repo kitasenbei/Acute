@@ -17,6 +17,7 @@ function TagNode({ tag, depth, tree, activeTagId, onSelect }) {
         gap={4}
         py={6}
         pr="sm"
+        mt={2}
         style={{
           paddingLeft: 8 + depth * 14,
           borderRadius: 8,
