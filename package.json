@@ -1,0 +1,31 @@
+{
+  "name": "mantine-electron-app",
+  "version": "1.0.0",
+  "description": "React + Electron + Mantine UI app",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev:vite": "vite",
+    "dev": "npm run build:backend && concurrently -k \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
+    "build:backend": "npm --prefix backend install && npm --prefix backend run build",
+    "build": "vite build",
+    "start": "npm run build:backend && npm run build && cross-env NODE_ENV=production electron ."
+  },
+  "dependencies": {
+    "@mantine/core": "^7.13.4",
+    "@mantine/hooks": "^7.13.4",
+    "@tabler/icons-react": "^3.21.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.2",
+    "vite": "^5.4.10",
+    "wait-on": "^8.0.1"
+  }
+}

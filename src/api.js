@@ -1,0 +1,91 @@
+// Thin client over the file-explorer backend. Base URL is injected by the
+// Electron preload; falls back to localhost for a plain browser in dev.
+const BASE = (typeof window !== 'undefined' && window.env?.apiBaseUrl) || 'http://localhost:3001'
+
+async function json(res) {
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error?.message || `Request failed (${res.status})`)
+  }
+  return res.status === 204 ? null : res.json()
+}
+
+const q = (path) => `?path=${encodeURIComponent(path ?? '')}`
+
+export const api = {
+  async waitUntilReady({ retries = 40, delayMs = 250 } = {}) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        if ((await fetch(`${BASE}/health`)).ok) return true
+      } catch {
+        // backend not up yet
+      }
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+    throw new Error('Backend did not start in time')
+  },
+
+  list(path = '') {
+    return fetch(`${BASE}/api/fs${q(path)}`).then(json)
+  },
+
+  createFolder(path, name) {
+    return fetch(`${BASE}/api/fs/folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, name }),
+    }).then(json)
+  },
+
+  upload(path, file) {
+    const form = new FormData()
+    form.append('path', path ?? '')
+    form.append('file', file)
+    return fetch(`${BASE}/api/fs/upload`, { method: 'POST', body: form }).then(json)
+  },
+
+  rename(path, name) {
+    return fetch(`${BASE}/api/fs/rename`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, name }),
+    }).then(json)
+  },
+
+  remove(path) {
+    return fetch(`${BASE}/api/fs${q(path)}`, { method: 'DELETE' }).then(json)
+  },
+
+  /** Direct URL to a file's bytes — usable as an <img> src for previews. */
+  contentUrl(path) {
+    return `${BASE}/api/fs/content${q(path)}`
+  },
+
+  async download(entry) {
+    const res = await fetch(`${BASE}/api/fs/content${q(entry.path)}`)
+    if (!res.ok) throw new Error('Download failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = entry.name
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  favorites: {
+    list() {
+      return fetch(`${BASE}/api/favorites`).then(json)
+    },
+    add(path) {
+      return fetch(`${BASE}/api/favorites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      }).then(json)
+    },
+    remove(path) {
+      return fetch(`${BASE}/api/favorites${q(path)}`, { method: 'DELETE' }).then(json)
+    },
+  },
+}
