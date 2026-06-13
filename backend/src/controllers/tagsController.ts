@@ -30,11 +30,17 @@ export class TagsController {
   })
 
   create = wrap(async (req, res) => {
-    res.status(201).json(this.service.createTag(req.body?.name, req.body?.color))
+    res.status(201).json(this.service.createTag(req.body?.name, req.body?.color, req.body?.parentId))
   })
 
   update = wrap(async (req, res) => {
-    res.json(this.service.updateTag(req.params.id, { name: req.body?.name, color: req.body?.color }))
+    res.json(
+      this.service.updateTag(req.params.id, {
+        name: req.body?.name,
+        color: req.body?.color,
+        parentId: req.body?.parentId,
+      }),
+    )
   })
 
   remove = wrap(async (req, res) => {

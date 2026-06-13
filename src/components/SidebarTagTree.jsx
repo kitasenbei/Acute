@@ -1,0 +1,72 @@
+import { Flex, Text, ColorSwatch, Box } from '@mantine/core'
+import { IconChevronRight } from '@tabler/icons-react'
+import { useState } from 'react'
+import { useTagsStore, buildTagTree } from '../stores/tagsStore.js'
+
+function TagNode({ tag, depth, tree, activeTagId, onSelect }) {
+  const collapsed = useTagsStore((s) => s.collapsed[tag.id])
+  const toggleCollapse = useTagsStore((s) => s.toggleCollapse)
+  const [hover, setHover] = useState(false)
+  const children = tree.childrenOf(tag.id)
+  const active = activeTagId === tag.id
+
+  return (
+    <>
+      <Flex
+        align="center"
+        gap={4}
+        py={6}
+        pr="sm"
+        style={{
+          paddingLeft: 8 + depth * 14,
+          borderRadius: 8,
+          cursor: 'pointer',
+          background: active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
+        }}
+        onClick={() => onSelect(tag.id)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+      >
+        {children.length > 0 ? (
+          <Box
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleCollapse(tag.id)
+            }}
+            style={{ display: 'flex', alignItems: 'center' }}
+          >
+            <IconChevronRight
+              size={13}
+              color="var(--mantine-color-dimmed)"
+              style={{ transform: collapsed ? 'none' : 'rotate(90deg)', transition: 'transform 120ms' }}
+            />
+          </Box>
+        ) : (
+          <Box w={13} />
+        )}
+        <ColorSwatch color={tag.color} size={11} />
+        <Text size="sm" truncate style={{ flex: 1 }}>
+          {tag.name}
+        </Text>
+      </Flex>
+      {!collapsed &&
+        children.map((child) => (
+          <TagNode
+            key={child.id}
+            tag={child}
+            depth={depth + 1}
+            tree={tree}
+            activeTagId={activeTagId}
+            onSelect={onSelect}
+          />
+        ))}
+    </>
+  )
+}
+
+export function SidebarTagTree({ tags, activeTagId, onSelect }) {
+  const tree = buildTagTree(tags)
+  return tree.childrenOf('').map((tag) => (
+    <TagNode key={tag.id} tag={tag} depth={0} tree={tree} activeTagId={activeTagId} onSelect={onSelect} />
+  ))
+}

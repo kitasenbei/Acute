@@ -34,11 +34,14 @@ export class TagService {
     return this.repository.pathsForTag(id)
   }
 
-  createTag(name: string, color?: string): Tag {
+  createTag(name: string, color?: string, parentId?: string | null): Tag {
+    const parent = this.resolveParent(parentId)
     const tag: Tag = {
       id: randomUUID(),
       name: this.cleanName(name),
-      color: this.cleanColor(color),
+      // New subtags inherit the parent's colour unless one is given.
+      color: color === undefined && parent ? parent.color : this.cleanColor(color),
+      parentId: parent?.id ?? null,
       createdAt: new Date().toISOString(),
     }
     try {
@@ -48,18 +51,39 @@ export class TagService {
     }
   }
 
-  updateTag(id: string, changes: { name?: string; color?: string }): Tag {
+  updateTag(id: string, changes: { name?: string; color?: string; parentId?: string | null }): Tag {
     const existing = this.repository.findById(id)
     if (!existing) throw new NotFoundError(`Tag ${id} not found`)
 
     const name = changes.name !== undefined ? this.cleanName(changes.name) : existing.name
     const color = changes.color !== undefined ? this.cleanColor(changes.color) : existing.color
+
+    let parentId = existing.parentId
+    if (changes.parentId !== undefined) {
+      const parent = this.resolveParent(changes.parentId)
+      if (parent) {
+        if (parent.id === id) throw new ValidationError('A tag cannot be its own parent')
+        if (this.repository.descendantIds(id).includes(parent.id)) {
+          throw new ValidationError('A tag cannot move under its own descendant')
+        }
+      }
+      parentId = parent?.id ?? null
+    }
+
     try {
-      this.repository.update(id, name, color)
+      this.repository.update(id, name, color, parentId)
     } catch (err) {
       throw this.asConflict(err)
     }
-    return { ...existing, name, color }
+    return { ...existing, name, color, parentId }
+  }
+
+  /** Validate an optional parent id, returning the parent tag or null. */
+  private resolveParent(parentId?: string | null): Tag | null {
+    if (parentId === undefined || parentId === null || parentId === '') return null
+    const parent = this.repository.findById(parentId)
+    if (!parent) throw new NotFoundError(`Parent tag ${parentId} not found`)
+    return parent
   }
 
   deleteTag(id: string): void {

@@ -28,7 +28,8 @@ function migrate(db: Database.Database): void {
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL UNIQUE,
       color      TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      parent_id  TEXT REFERENCES tags(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS file_tags (
@@ -40,4 +41,10 @@ function migrate(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_file_tags_path ON file_tags (path);
   `)
+
+  // Backfill parent_id for databases created before subtags existed.
+  const cols = db.prepare(`PRAGMA table_info(tags)`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'parent_id')) {
+    db.exec(`ALTER TABLE tags ADD COLUMN parent_id TEXT REFERENCES tags(id) ON DELETE SET NULL`)
+  }
 }

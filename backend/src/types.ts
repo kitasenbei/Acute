@@ -26,11 +26,13 @@ export interface Favorite {
   createdAt: string
 }
 
-/** A user-defined tag (label + colour). */
+/** A user-defined tag (label + colour). May nest under a parent tag. */
 export interface Tag {
   id: string
   name: string
   color: string
+  /** Parent tag id, or null for a top-level tag. */
+  parentId: string | null
   createdAt: string
 }
 

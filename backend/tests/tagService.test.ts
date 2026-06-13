@@ -69,4 +69,37 @@ describe('TagService (business tier)', () => {
     expect(service.listTags()).toHaveLength(0)
     expect(service.listAssignments()).toHaveLength(0)
   })
+
+  describe('subtags', () => {
+    it('creates a subtag that inherits the parent colour', () => {
+      const parent = service.createTag('Project', '#1971c2')
+      const child = service.createTag('Acute', undefined, parent.id)
+      expect(child.parentId).toBe(parent.id)
+      expect(child.color).toBe('#1971c2')
+    })
+
+    it('filtering a parent returns files tagged on any descendant', () => {
+      const parent = service.createTag('Project')
+      const child = service.createTag('Acute', undefined, parent.id)
+      service.assign('a.txt', parent.id)
+      service.assign('b.txt', child.id)
+      expect(service.pathsForTag(parent.id).sort()).toEqual(['a.txt', 'b.txt'])
+      expect(service.pathsForTag(child.id)).toEqual(['b.txt'])
+    })
+
+    it('rejects self-parenting and cycles', () => {
+      const a = service.createTag('A')
+      const b = service.createTag('B', undefined, a.id)
+      expect(() => service.updateTag(a.id, { parentId: a.id })).toThrow(ValidationError)
+      expect(() => service.updateTag(a.id, { parentId: b.id })).toThrow(ValidationError)
+    })
+
+    it('deleting a parent promotes children to top-level', () => {
+      const parent = service.createTag('Group')
+      const child = service.createTag('Child', undefined, parent.id)
+      service.deleteTag(parent.id)
+      const reloaded = service.listTags().find((t) => t.id === child.id)
+      expect(reloaded?.parentId).toBeNull()
+    })
+  })
 })

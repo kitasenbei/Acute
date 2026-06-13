@@ -98,11 +98,11 @@ export const api = {
     list() {
       return fetch(`${BASE}/api/tags`).then(json)
     },
-    create(name, color) {
+    create(name, color, parentId) {
       return fetch(`${BASE}/api/tags`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color }),
+        body: JSON.stringify({ name, color, parentId }),
       }).then(json)
     },
     update(id, changes) {

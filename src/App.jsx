@@ -57,9 +57,10 @@ import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
-import { useTagsStore } from './stores/tagsStore.js'
+import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
 import { TagDots } from './components/TagManagerModal.jsx'
+import { SidebarTagTree } from './components/SidebarTagTree.jsx'
 
 // Shared empty array keeps untagged rows' `tags` prop referentially stable.
 const EMPTY_TAGS = []
@@ -474,6 +475,7 @@ export default function App() {
   )
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
   const activeTag = activeTagId ? tags.find((t) => t.id === activeTagId) : null
+  const tagTree = useMemo(() => buildTagTree(tags), [tags])
 
   // Stable path -> Tag[] map so memoized rows only re-render when tags change.
   const tagsByPath = useMemo(() => {
@@ -599,7 +601,7 @@ export default function App() {
     const assigned = new Set(assignments[entry.path] || [])
     for (const tag of tags) {
       items.push({
-        label: tag.name,
+        label: tagTree.pathName(tag),
         dot: tag.color,
         checked: assigned.has(tag.id),
         onClick: () => toggleTag(entry.path, tag.id),
@@ -615,7 +617,7 @@ export default function App() {
       onClick: () => run(() => api.remove(entry.path)),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -706,15 +708,7 @@ export default function App() {
             />
           ))}
           {tags.length > 0 && <Divider my={6} />}
-          {tags.map((t) => (
-            <SidebarItem
-              key={t.id}
-              dot={t.color}
-              label={t.name}
-              active={activeTagId === t.id}
-              onClick={() => loadTag(t.id)}
-            />
-          ))}
+          <SidebarTagTree tags={tags} activeTagId={activeTagId} onSelect={loadTag} />
         </Box>
         <SidebarItem icon={IconTags} label="Tags" onClick={() => openTagManager()} />
         <SidebarItem icon={IconSettings} label="Settings" onClick={() => openSettings()} />
