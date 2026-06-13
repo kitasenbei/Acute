@@ -1,3 +1,5 @@
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
@@ -55,6 +57,15 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
 
     const after = await request(app).get('/api/fs').query({ path: 'Work' })
     expect(after.status).toBe(404)
+  })
+
+  it('serves a file with a non-ASCII name without crashing', async () => {
+    const name = 'café ☕.txt'
+    await fs.writeFile(path.join(stack.rootDir, name), 'x')
+
+    const res = await request(app).get('/api/fs/content').query({ path: name })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-disposition']).toContain("filename*=UTF-8''")
   })
 
   it('rejects traversal with 400', async () => {

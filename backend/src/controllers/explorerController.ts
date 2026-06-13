@@ -16,6 +16,16 @@ function pathParam(value: unknown): string {
 }
 
 /**
+ * Build a Content-Disposition that is safe for HTTP headers. The plain
+ * `filename` must be ASCII (Node rejects other bytes), so non-ASCII names are
+ * preserved via the RFC 5987 `filename*` form and stripped from the fallback.
+ */
+function contentDisposition(name: string): string {
+  const asciiFallback = name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_')
+  return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(name)}`
+}
+
+/**
  * Presentation tier for browsing. Maps HTTP to {@link ExplorerService} calls.
  */
 export class ExplorerController {
@@ -52,7 +62,7 @@ export class ExplorerController {
   download = wrap(async (req, res) => {
     const file = await this.service.getFileContent(pathParam(req.query.path))
     res.setHeader('Content-Type', file.mimeType)
-    res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`)
+    res.setHeader('Content-Disposition', contentDisposition(file.name))
     res.send(file.content)
   })
 }
