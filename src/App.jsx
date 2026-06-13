@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   Box,
   Center,
@@ -6,7 +6,6 @@ import {
   Flex,
   Group,
   Loader,
-  ScrollArea,
   SegmentedControl,
   Text,
   TextInput,
@@ -56,6 +55,7 @@ import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
+import { VirtualEntries } from './components/VirtualEntries.jsx'
 
 // Standard home subfolders a file explorer surfaces for quick access. Only the
 // ones that actually exist under the root are shown.
@@ -368,6 +368,7 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false)
   const resetRef = useRef(null)
   const contentRef = useRef(null)
+  const scrollRef = useRef(null)
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
@@ -435,10 +436,11 @@ export default function App() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [zoomBy])
 
-  const entries = (listing?.entries ?? []).filter(
-    (e) => showHidden || !e.name.startsWith('.'),
+  const entries = useMemo(
+    () => (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.')),
+    [listing, showHidden],
   )
-  const favSet = new Set(favorites.map((f) => f.path))
+  const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
 
   async function run(fn) {
     try {
@@ -553,6 +555,14 @@ export default function App() {
       openContextMenu(ev.clientX, ev.clientY, buildMenuItems(e))
     },
   })
+
+  // Renders one entry for the virtualizer, picking row vs. tile by view mode.
+  const renderEntry = (entry) =>
+    mode === 'grid' ? (
+      <EntryTile key={entry.path} {...entryProps(entry)} />
+    ) : (
+      <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} />
+    )
 
   const createInput = (
     <TextInput
@@ -676,50 +686,33 @@ export default function App() {
           </Text>
         )}
 
-        <ScrollArea style={{ flex: 1 }}>
+        {/* New-folder input as a bar above the list, so the scroll viewport
+            holds only the virtualized items (keeps windowing offsets simple). */}
+        {creating && (
+          <Flex align="center" gap="sm" px="md" py={7}
+            style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+            <ThemeIcon variant="light" color="yellow" size={32} radius="md">
+              <IconFolder size={18} />
+            </ThemeIcon>
+            {createInput}
+          </Flex>
+        )}
+
+        <Box ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           {loading ? (
             <Center h={240}><Loader size="sm" /></Center>
-          ) : mode === 'grid' ? (
-            <Box p="md">
-              <Box
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(auto-fill, minmax(${Math.round(92 * zoom)}px, 1fr))`,
-                  gap: 12,
-                }}
-              >
-                {creating && (
-                  <Flex direction="column" align="center" gap={8} p="sm">
-                    <ThemeIcon variant="light" color="yellow" size={Math.round(64 * zoom)} radius="md">
-                      <IconFolder size={Math.round(32 * zoom)} />
-                    </ThemeIcon>
-                    {createInput}
-                  </Flex>
-                )}
-                {entries.map((entry) => (
-                  <EntryTile key={entry.path} {...entryProps(entry)} />
-                ))}
-              </Box>
-              {entries.length === 0 && !creating && emptyState}
-            </Box>
+          ) : entries.length === 0 ? (
+            !creating && emptyState
           ) : (
-            <Box p={6}>
-              {creating && (
-                <Flex align="center" gap="sm" px="md" py={7}>
-                  <ThemeIcon variant="light" color="yellow" size={32} radius="md">
-                    <IconFolder size={18} />
-                  </ThemeIcon>
-                  {createInput}
-                </Flex>
-              )}
-              {entries.length === 0 && !creating
-                ? emptyState
-                : entries.map((entry) => (
-                    <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} />
-                  ))}
-            </Box>
+            <VirtualEntries
+              entries={entries}
+              mode={mode}
+              zoom={zoom}
+              scrollRef={scrollRef}
+              renderEntry={renderEntry}
+            />
           )}
-        </ScrollArea>
+        </Box>
       </Flex>
     </Flex>
   )
