@@ -68,6 +68,12 @@ export function VideoPlayer({ src }) {
     setMuted(val === 0)
   }
 
+  const nudgeVolume = (e) => {
+    const base = muted ? 0 : volume
+    const next = Math.min(1, Math.max(0, +(base + (e.deltaY < 0 ? 0.05 : -0.05)).toFixed(2)))
+    changeVolume(next)
+  }
+
   const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen()
     else stageRef.current?.requestFullscreen?.()
@@ -151,19 +157,23 @@ export function VideoPlayer({ src }) {
             <ActionIcon variant="transparent" style={iconStyle} onClick={togglePlay}>
               {playing ? <IconPlayerPauseFilled size={18} /> : <IconPlayerPlayFilled size={18} />}
             </ActionIcon>
-            <ActionIcon variant="transparent" style={iconStyle} onClick={toggleMute}>
-              {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
-            </ActionIcon>
-            <Slider
-              value={muted ? 0 : volume}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={changeVolume}
-              size="xs"
-              w={80}
-              label={null}
-            />
+            {/* Mute + volume share one wheel-/click-friendly zone with padding. */}
+            <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8, cursor: 'ns-resize' }}>
+              <ActionIcon variant="transparent" style={iconStyle} onClick={toggleMute}>
+                {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
+              </ActionIcon>
+              <Slider
+                value={muted ? 0 : volume}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={changeVolume}
+                size="md"
+                thumbSize={14}
+                w={90}
+                label={null}
+              />
+            </Group>
             <Text size="xs" c="white" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatTime(current)} / {formatTime(duration)}
             </Text>
