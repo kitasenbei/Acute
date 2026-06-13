@@ -96,7 +96,7 @@ function NoPreview({ entry }) {
   )
 }
 
-function PreviewBody({ entry }) {
+function PreviewBody({ entry, nav }) {
   const url = api.contentUrl(entry.path)
   switch (fileKind(entry)) {
     case 'image':
@@ -112,7 +112,7 @@ function PreviewBody({ entry }) {
     case 'video':
       return <VideoPlayer src={url} />
     case 'audio':
-      return <AudioPlayer src={url} name={entry.name} />
+      return <AudioPlayer src={url} name={entry.name} {...nav} />
     case 'pdf':
       return <iframe src={url} title={entry.name} style={{ width: '100%', height: '75vh', border: 'none' }} />
     case 'code':
@@ -134,6 +134,11 @@ export function PreviewModal() {
   const close = usePreviewStore((s) => s.close)
   const showDetails = usePreviewStore((s) => s.showDetails)
   const toggleDetails = usePreviewStore((s) => s.toggleDetails)
+  const playlist = usePreviewStore((s) => s.playlist)
+  const index = usePreviewStore((s) => s.index)
+  const next = usePreviewStore((s) => s.next)
+  const prev = usePreviewStore((s) => s.prev)
+  const nav = { onPrev: prev, onNext: next, hasPrev: index > 0, hasNext: index < playlist.length - 1 }
 
   return (
     <Modal
@@ -199,7 +204,7 @@ export function PreviewModal() {
           <Flex style={{ flex: 1, minHeight: 0 }}>
             {showDetails && <FileDetails files={[entry]} />}
             <Box style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
-              <PreviewBody entry={entry} />
+              <PreviewBody entry={entry} nav={nav} />
             </Box>
           </Flex>
         </Flex>

@@ -643,7 +643,14 @@ export default function App() {
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
-  const handleOpenFile = useCallback((e) => openPreview(e), [openPreview])
+  const handleOpenFile = useCallback(
+    (e) => {
+      // Pass siblings of the same kind so the preview can offer prev/next.
+      const playlist = entries.filter((x) => fileKind(x) === fileKind(e))
+      openPreview(e, playlist)
+    },
+    [openPreview, entries],
+  )
   const handleCancelEdit = useCallback(() => setEditingPath(null), [])
   const handleDelete = useCallback((e) => run(() => api.remove(e.path)), [run])
   const handleContextMenu = useCallback(

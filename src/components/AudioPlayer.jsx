@@ -4,6 +4,8 @@ import { Box, Stack, Group, Text, Slider, ActionIcon } from '@mantine/core'
 import {
   IconPlayerPlayFilled,
   IconPlayerPauseFilled,
+  IconPlayerTrackPrevFilled,
+  IconPlayerTrackNextFilled,
   IconVolume,
   IconVolumeOff,
   IconMusic,
@@ -16,11 +18,13 @@ import { usePlayerStore } from '../stores/playerStore.js'
  * while playing), the track name, a seek bar, and the shared persisted volume.
  * Themed surfaces, so it looks right in both light and dark.
  */
-export function AudioPlayer({ src, name }) {
+export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
   const audioRef = useRef(null)
+  const autoplayRef = useRef(false)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
+  const hasNav = hasPrev || hasNext
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
   const setVolume = usePlayerStore((s) => s.setVolume)
@@ -64,6 +68,18 @@ export function AudioPlayer({ src, name }) {
     changeVolume(Math.min(1, Math.max(0, +(base + (e.deltaY < 0 ? 0.05 : -0.05)).toFixed(2))))
   }
 
+  // Navigating tracks continues playback on the next one.
+  const goPrev = () => {
+    if (!hasPrev) return
+    autoplayRef.current = true
+    onPrev()
+  }
+  const goNext = () => {
+    if (!hasNext) return
+    autoplayRef.current = true
+    onNext()
+  }
+
   return (
     <Box style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <Stack align="center" gap="lg" w={380} maw="100%">
@@ -91,9 +107,21 @@ export function AudioPlayer({ src, name }) {
           </Group>
         </Box>
 
-        <ActionIcon variant="filled" radius="xl" size={56} onClick={togglePlay}>
-          {playing ? <IconPlayerPauseFilled size={26} /> : <IconPlayerPlayFilled size={26} />}
-        </ActionIcon>
+        <Group justify="center" gap="md">
+          {hasNav && (
+            <ActionIcon variant="subtle" color="gray" radius="xl" size={40} disabled={!hasPrev} onClick={goPrev}>
+              <IconPlayerTrackPrevFilled size={18} />
+            </ActionIcon>
+          )}
+          <ActionIcon variant="filled" radius="xl" size={56} onClick={togglePlay}>
+            {playing ? <IconPlayerPauseFilled size={26} /> : <IconPlayerPlayFilled size={26} />}
+          </ActionIcon>
+          {hasNav && (
+            <ActionIcon variant="subtle" color="gray" radius="xl" size={40} disabled={!hasNext} onClick={goNext}>
+              <IconPlayerTrackNextFilled size={18} />
+            </ActionIcon>
+          )}
+        </Group>
 
         <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8, cursor: 'ns-resize' }}>
           <ActionIcon variant="subtle" color="gray" onClick={toggleMute}>
@@ -109,8 +137,14 @@ export function AudioPlayer({ src, name }) {
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        onEnded={() => setPlaying(false)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration)
+          if (autoplayRef.current) {
+            autoplayRef.current = false
+            e.currentTarget.play()
+          }
+        }}
+        onEnded={() => (hasNext ? goNext() : setPlaying(false))}
       />
     </Box>
   )
