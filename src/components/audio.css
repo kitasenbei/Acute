@@ -1,0 +1,37 @@
+.audio-art {
+  width: 180px;
+  height: 180px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--mantine-color-grape-6), var(--mantine-color-indigo-7));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.audio-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 44px;
+}
+
+.audio-eq span {
+  display: block;
+  width: 6px;
+  height: 40px;
+  background: #fff;
+  border-radius: 3px;
+  transform-origin: bottom;
+  animation: audio-eq-bounce 0.9s ease-in-out infinite;
+}
+
+@keyframes audio-eq-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
