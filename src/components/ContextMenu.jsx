@@ -19,7 +19,7 @@ export function ContextMenu() {
       <Menu.Target>
         <div style={{ position: 'fixed', left: x, top: y, width: 0, height: 0 }} />
       </Menu.Target>
-      <Menu.Dropdown>
+      <Menu.Dropdown style={{ maxHeight: '70vh', overflowY: 'auto' }}>
         {items.map((item, i) => {
           if (item.divider) return <Menu.Divider key={`divider-${i}`} />
           const Icon = item.icon

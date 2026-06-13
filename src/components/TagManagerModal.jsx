@@ -136,7 +136,7 @@ export function TagManagerModal() {
 }
 
 /** Small coloured dots shown on entries to indicate their tags. */
-export function TagDots({ tags, max = 3 }) {
+export function TagDots({ tags, max = 4 }) {
   if (!tags?.length) return null
   return (
     <Group gap={3} wrap="nowrap">
