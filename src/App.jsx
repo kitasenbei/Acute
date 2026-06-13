@@ -25,6 +25,7 @@ import {
   IconUpload,
   IconChevronRight,
   IconEye,
+  IconEyeOff,
   IconExternalLink,
   IconFolderOpen,
   IconDownload,
@@ -334,6 +335,8 @@ export default function App() {
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
+  const showHidden = useViewStore((s) => s.showHidden)
+  const toggleHidden = useViewStore((s) => s.toggleHidden)
   const openPreview = usePreviewStore((s) => s.open)
   const openContextMenu = useContextMenuStore((s) => s.open)
 
@@ -380,7 +383,9 @@ export default function App() {
     })()
   }, [load, loadFavorites, loadPlaces])
 
-  const entries = listing?.entries ?? []
+  const entries = (listing?.entries ?? []).filter(
+    (e) => showHidden || !e.name.startsWith('.'),
+  )
   const favSet = new Set(favorites.map((f) => f.path))
 
   async function run(fn) {
@@ -580,6 +585,15 @@ export default function App() {
                 { value: 'grid', label: <Center><IconLayoutGrid size={15} /></Center> },
               ]}
             />
+            <Tooltip label={showHidden ? 'Hide dot files' : 'Show dot files'} openDelay={400}>
+              <ActionIcon
+                variant={showHidden ? 'light' : 'subtle'}
+                color="gray"
+                onClick={toggleHidden}
+              >
+                {showHidden ? <IconEye size={18} /> : <IconEyeOff size={18} />}
+              </ActionIcon>
+            </Tooltip>
             <Tooltip label="New folder" openDelay={400}>
               <ActionIcon variant="subtle" color="gray" onClick={() => setCreating(true)}>
                 <IconFolderPlus size={18} />

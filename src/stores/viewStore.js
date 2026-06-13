@@ -14,6 +14,10 @@ export const useViewStore = create(
     (set) => ({
       mode: 'list', // 'list' | 'compact' | 'grid'
       setMode: (mode) => set({ mode }),
+
+      // Whether dot files (names starting with '.') are shown.
+      showHidden: false,
+      toggleHidden: () => set((s) => ({ showHidden: !s.showHidden })),
     }),
     { name: 'app-view' },
   ),
