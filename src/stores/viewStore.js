@@ -23,6 +23,16 @@ export const useViewStore = create(
       zoom: 1,
       zoomBy: (delta) =>
         set((s) => ({ zoom: Math.min(2, Math.max(0.6, +(s.zoom + delta).toFixed(2))) })),
+
+      // Sorting: field + direction. Picking the active field flips direction.
+      sortBy: 'name', // 'name' | 'modified' | 'size'
+      sortDir: 'asc', // 'asc' | 'desc'
+      setSort: (field) =>
+        set((s) =>
+          s.sortBy === field
+            ? { sortDir: s.sortDir === 'asc' ? 'desc' : 'asc' }
+            : { sortBy: field, sortDir: field === 'name' ? 'asc' : 'desc' },
+        ),
     }),
     { name: 'app-view' },
   ),

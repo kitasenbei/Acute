@@ -15,10 +15,13 @@ import {
   ActionIcon,
   UnstyledButton,
   FileButton,
+  Menu,
 } from '@mantine/core'
 import {
   IconHome,
   IconArrowUp,
+  IconArrowDown,
+  IconArrowsSort,
   IconRefresh,
   IconFolderPlus,
   IconUpload,
@@ -64,6 +67,22 @@ import { SidebarTagTree } from './components/SidebarTagTree.jsx'
 
 // Shared empty array keeps untagged rows' `tags` prop referentially stable.
 const EMPTY_TAGS = []
+
+const SORTS = [
+  { value: 'name', label: 'Name' },
+  { value: 'modified', label: 'Date modified' },
+  { value: 'size', label: 'Size' },
+]
+
+// Sort entries with folders always first, then by the chosen field/direction.
+function compareEntries(a, b, field, dir) {
+  if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+  let r = 0
+  if (field === 'modified') r = new Date(a.modifiedAt) - new Date(b.modifiedAt)
+  else if (field === 'size') r = a.size - b.size
+  if (r === 0) r = a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
+  return dir === 'desc' ? -r : r
+}
 
 // Standard home subfolders a file explorer surfaces for quick access. Only the
 // ones that actually exist under the root are shown.
@@ -386,6 +405,9 @@ export default function App() {
   const setMode = useViewStore((s) => s.setMode)
   const showHidden = useViewStore((s) => s.showHidden)
   const toggleHidden = useViewStore((s) => s.toggleHidden)
+  const sortBy = useViewStore((s) => s.sortBy)
+  const sortDir = useViewStore((s) => s.sortDir)
+  const setSort = useViewStore((s) => s.setSort)
   const zoom = useViewStore((s) => s.zoom)
   const zoomBy = useViewStore((s) => s.zoomBy)
   const openPreview = usePreviewStore((s) => s.open)
@@ -469,10 +491,10 @@ export default function App() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [zoomBy])
 
-  const entries = useMemo(
-    () => (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.')),
-    [listing, showHidden],
-  )
+  const entries = useMemo(() => {
+    const filtered = (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.'))
+    return [...filtered].sort((a, b) => compareEntries(a, b, sortBy, sortDir))
+  }, [listing, showHidden, sortBy, sortDir])
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
   const activeTag = activeTagId ? tags.find((t) => t.id === activeTagId) : null
   const tagTree = useMemo(() => buildTagTree(tags), [tags])
@@ -748,6 +770,31 @@ export default function App() {
             )}
           </Group>
           <Group gap={8} wrap="nowrap">
+            <Menu shadow="md" width={190} position="bottom-end">
+              <Menu.Target>
+                <Tooltip label="Sort" openDelay={400}>
+                  <ActionIcon variant="subtle" color="gray">
+                    <IconArrowsSort size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Sort by</Menu.Label>
+                {SORTS.map((s) => (
+                  <Menu.Item
+                    key={s.value}
+                    onClick={() => setSort(s.value)}
+                    rightSection={
+                      sortBy === s.value ? (
+                        sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />
+                      ) : null
+                    }
+                  >
+                    {s.label}
+                  </Menu.Item>
+                ))}
+              </Menu.Dropdown>
+            </Menu>
             <SegmentedControl
               size="xs"
               value={mode}
