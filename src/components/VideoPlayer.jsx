@@ -8,6 +8,7 @@ import {
   IconMaximize,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
+import { usePlayerStore } from '../stores/playerStore.js'
 
 /**
  * Custom video player: the video fills a black stage (small clips scale up,
@@ -20,9 +21,12 @@ export function VideoPlayer({ src }) {
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [muted, setMuted] = useState(false)
-  const [volume, setVolume] = useState(1)
   const [hovering, setHovering] = useState(false)
+  // Volume/mute are remembered across videos and sessions.
+  const volume = usePlayerStore((s) => s.volume)
+  const muted = usePlayerStore((s) => s.muted)
+  const setVolume = usePlayerStore((s) => s.setVolume)
+  const setMuted = usePlayerStore((s) => s.setMuted)
 
   // Reset transport state when the source changes.
   useEffect(() => {
@@ -30,6 +34,15 @@ export function VideoPlayer({ src }) {
     setCurrent(0)
     setDuration(0)
   }, [src])
+
+  // Apply the remembered volume/mute to the element.
+  useEffect(() => {
+    const v = videoRef.current
+    if (v) {
+      v.volume = volume
+      v.muted = muted
+    }
+  }, [volume, muted, src])
 
   const video = () => videoRef.current
 
@@ -48,18 +61,9 @@ export function VideoPlayer({ src }) {
     }
   }
 
-  const toggleMute = () => {
-    const v = video()
-    if (!v) return
-    v.muted = !v.muted
-    setMuted(v.muted)
-  }
+  const toggleMute = () => setMuted(!muted)
 
   const changeVolume = (val) => {
-    const v = video()
-    if (!v) return
-    v.volume = val
-    v.muted = val === 0
     setVolume(val)
     setMuted(val === 0)
   }
