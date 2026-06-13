@@ -753,9 +753,30 @@ export default function App() {
               value={mode}
               onChange={setMode}
               data={[
-                { value: 'list', label: <Center><IconLayoutList size={15} /></Center> },
-                { value: 'compact', label: <Center><IconLayoutRows size={15} /></Center> },
-                { value: 'grid', label: <Center><IconLayoutGrid size={15} /></Center> },
+                {
+                  value: 'list',
+                  label: (
+                    <Tooltip label="List" openDelay={400}>
+                      <Center><IconLayoutList size={15} /></Center>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  value: 'compact',
+                  label: (
+                    <Tooltip label="Compact" openDelay={400}>
+                      <Center><IconLayoutRows size={15} /></Center>
+                    </Tooltip>
+                  ),
+                },
+                {
+                  value: 'grid',
+                  label: (
+                    <Tooltip label="Grid" openDelay={400}>
+                      <Center><IconLayoutGrid size={15} /></Center>
+                    </Tooltip>
+                  ),
+                },
               ]}
             />
             <Tooltip label={showHidden ? 'Hide dot files' : 'Show dot files'} openDelay={400}>
