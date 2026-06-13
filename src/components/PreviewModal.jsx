@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import {
   Modal,
   Flex,
@@ -25,6 +25,9 @@ import { fileKind } from '../fileTypes.js'
 import { usePreviewStore } from '../stores/previewStore.js'
 import { FileDetails } from './FileDetails.jsx'
 import { VideoPlayer } from './VideoPlayer.jsx'
+
+// Monaco is heavy — load it only when a code file is actually previewed.
+const CodePreview = lazy(() => import('./CodePreview.jsx'))
 
 const native = typeof window !== 'undefined' ? window.native : undefined
 
@@ -115,6 +118,12 @@ function PreviewBody({ entry }) {
       )
     case 'pdf':
       return <iframe src={url} title={entry.name} style={{ width: '100%', height: '75vh', border: 'none' }} />
+    case 'code':
+      return (
+        <Suspense fallback={<Center h="75vh"><Loader size="sm" /></Center>}>
+          <CodePreview entry={entry} />
+        </Suspense>
+      )
     case 'text':
       return <TextPreview url={url} />
     default:

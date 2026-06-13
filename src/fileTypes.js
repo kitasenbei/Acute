@@ -21,7 +21,8 @@ export function fileKind(entry) {
   if (EXT.video.includes(e)) return 'video'
   if (EXT.audio.includes(e)) return 'audio'
   if (EXT.pdf.includes(e)) return 'pdf'
-  if (EXT.code.includes(e) || EXT.text.includes(e)) return 'text'
+  if (EXT.code.includes(e)) return 'code' // shown in the Monaco editor
+  if (EXT.text.includes(e)) return 'text' // shown in the plain viewer
   return 'other'
 }
 
@@ -29,6 +30,19 @@ export function fileKind(entry) {
 export function isPreviewable(entry) {
   const kind = fileKind(entry)
   return kind !== 'dir' && kind !== 'other'
+}
+
+// Map an extension to a Monaco language id for syntax highlighting.
+const MONACO_LANG = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  json: 'json', html: 'html', css: 'css', scss: 'scss', less: 'less',
+  py: 'python', sh: 'shell', bash: 'shell', xml: 'xml',
+  yml: 'yaml', yaml: 'yaml', md: 'markdown',
+}
+
+export function monacoLanguage(name) {
+  return MONACO_LANG[extOf(name)] ?? 'plaintext'
 }
 
 /** Human-readable description of an entry's type, e.g. "PNG image". */
