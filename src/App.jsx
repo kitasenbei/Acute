@@ -93,7 +93,7 @@ const thumbBox = (size) => ({
 
 /** A square preview: a real thumbnail for image/video files, otherwise the
  * type icon. Falls back to the icon if the media fails to load. */
-function Thumb({ entry, size, iconSize, scrolling }) {
+function Thumb({ entry, size, iconSize }) {
   const { Icon, color } = iconForEntry(entry)
   const [failed, setFailed] = useState(false)
   const kind = fileKind(entry)
@@ -101,7 +101,7 @@ function Thumb({ entry, size, iconSize, scrolling }) {
 
   // Backend serves a small cached WebP, so the renderer only decodes a tiny
   // image — no full-resolution decode, no <video> elements in the listing.
-  if (!scrolling && !failed && hasThumb) {
+  if (!failed && hasThumb) {
     const px = Math.min(512, Math.round(size * 2)) // a touch sharper than 1x
     return (
       <Box style={thumbBox(size)}>
@@ -180,7 +180,7 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -204,7 +204,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
         background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
-      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} scrolling={scrolling} />
+      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} />
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
@@ -260,7 +260,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
   )
 })
 
-const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, scrolling, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -303,7 +303,7 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, sc
         </Group>
       )}
 
-      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} scrolling={scrolling} />
+      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} />
 
       <Box w="100%" style={{ textAlign: 'center' }}>
         {editing ? (
@@ -577,12 +577,11 @@ export default function App() {
   })
 
   // Renders one entry for the virtualizer, picking row vs. tile by view mode.
-  // `scrolling` defers thumbnail loading while the list is in motion.
-  const renderEntry = (entry, scrolling) =>
+  const renderEntry = (entry) =>
     mode === 'grid' ? (
-      <EntryTile key={entry.path} {...entryProps(entry)} scrolling={scrolling} />
+      <EntryTile key={entry.path} {...entryProps(entry)} />
     ) : (
-      <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} scrolling={scrolling} />
+      <EntryRow key={entry.path} compact={mode === 'compact'} {...entryProps(entry)} />
     )
 
   const createInput = (

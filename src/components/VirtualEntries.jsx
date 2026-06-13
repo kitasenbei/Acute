@@ -39,12 +39,9 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry }) 
     count: rowCount,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => estRow,
-    overscan: 4,
+    // A small buffer above/below keeps edge thumbnails mounted across micro-scrolls.
+    overscan: 6,
   })
-
-  // While actively scrolling, render lightweight icons instead of fetching
-  // full-resolution image/video thumbnails — the heavy work waits for idle.
-  const scrolling = virtualizer.isScrolling
 
   // Re-measure when sizing inputs change (zoom / column count).
   useEffect(() => {
@@ -63,12 +60,10 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry }) 
               padding: `0 ${pad}px`,
             }}
           >
-            {entries
-              .slice(item.index * cols, item.index * cols + cols)
-              .map((entry) => renderEntry(entry, scrolling))}
+            {entries.slice(item.index * cols, item.index * cols + cols).map(renderEntry)}
           </Box>
         ) : (
-          <Box px={6}>{renderEntry(entries[item.index], scrolling)}</Box>
+          <Box px={6}>{renderEntry(entries[item.index])}</Box>
         )
 
         return (
