@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import request from 'supertest'
+import sharp from 'sharp'
 import { createApp } from '../src/app.js'
 import { makeTestStack, type TestStack } from './helpers.js'
 import type { Express } from 'express'
@@ -66,6 +67,25 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
     const res = await request(app).get('/api/fs/content').query({ path: name })
     expect(res.status).toBe(200)
     expect(res.headers['content-disposition']).toContain("filename*=UTF-8''")
+  })
+
+  it('generates a WebP thumbnail for an image', async () => {
+    const png = await sharp({
+      create: { width: 400, height: 300, channels: 3, background: { r: 10, g: 120, b: 200 } },
+    })
+      .png()
+      .toBuffer()
+    await fs.writeFile(path.join(stack.rootDir, 'pic.png'), png)
+
+    const res = await request(app).get('/api/fs/thumbnail').query({ path: 'pic.png', w: 128 })
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('image/webp')
+    expect(res.body.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 when thumbnailing an unsupported type', async () => {
+    const res = await request(app).get('/api/fs/thumbnail').query({ path: 'notes.txt' })
+    expect(res.status).toBe(400)
   })
 
   it('rejects traversal with 400', async () => {

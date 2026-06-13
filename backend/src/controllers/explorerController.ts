@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { ValidationError } from '../errors.js'
 import type { ExplorerService } from '../services/explorerService.js'
+import type { ThumbnailService } from '../services/thumbnailService.js'
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>
 
@@ -29,10 +30,20 @@ function contentDisposition(name: string): string {
  * Presentation tier for browsing. Maps HTTP to {@link ExplorerService} calls.
  */
 export class ExplorerController {
-  constructor(private readonly service: ExplorerService) {}
+  constructor(
+    private readonly service: ExplorerService,
+    private readonly thumbnails: ThumbnailService,
+  ) {}
 
   list = wrap(async (req, res) => {
     res.json(await this.service.listDir(pathParam(req.query.path)))
+  })
+
+  thumbnail = wrap(async (req, res) => {
+    const size = Number(req.query.w) || 256
+    const file = await this.thumbnails.getThumbnail(pathParam(req.query.path), size)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.type('image/webp').sendFile(file)
   })
 
   createFolder = wrap(async (req, res) => {

@@ -11,6 +11,8 @@ export interface Config {
   rootDir: string
   dataDir: string
   dbPath: string
+  /** Where generated thumbnails are cached. */
+  thumbDir: string
 }
 
 export const config: Config = {
@@ -18,4 +20,5 @@ export const config: Config = {
   rootDir: process.env.ROOT_DIR ?? os.homedir(),
   dataDir,
   dbPath: process.env.DB_PATH ?? path.join(dataDir, 'app.db'),
+  thumbDir: process.env.THUMB_DIR ?? path.join(dataDir, 'thumbnails'),
 }

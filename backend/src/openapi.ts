@@ -121,6 +121,21 @@ export const openapiSpec: JsonObject = {
         },
       },
     },
+    '/api/fs/thumbnail': {
+      get: {
+        tags: ['Explorer'],
+        summary: 'Cached thumbnail for an image or video',
+        parameters: [
+          { $ref: '#/components/parameters/PathQuery' },
+          { name: 'w', in: 'query', required: false, description: 'Max size in px', schema: { type: 'integer', default: 256 } },
+        ],
+        responses: {
+          200: { description: 'WebP thumbnail', content: { 'image/webp': { schema: { type: 'string', format: 'binary' } } } },
+          400: { $ref: '#/components/responses/BadRequest' },
+          404: { $ref: '#/components/responses/NotFound' },
+        },
+      },
+    },
     '/api/fs/rename': {
       patch: {
         tags: ['Explorer'],

@@ -97,51 +97,35 @@ function Thumb({ entry, size, iconSize, scrolling }) {
   const { Icon, color } = iconForEntry(entry)
   const [failed, setFailed] = useState(false)
   const kind = fileKind(entry)
+  const hasThumb = kind === 'image' || kind === 'video'
 
-  if (!scrolling && !failed && kind === 'image') {
+  // Backend serves a small cached WebP, so the renderer only decodes a tiny
+  // image — no full-resolution decode, no <video> elements in the listing.
+  if (!scrolling && !failed && hasThumb) {
+    const px = Math.min(512, Math.round(size * 2)) // a touch sharper than 1x
     return (
       <Box style={thumbBox(size)}>
         <img
-          src={api.contentUrl(entry.path)}
+          src={api.thumbnailUrl(entry.path, px)}
           alt={entry.name}
           loading="lazy"
+          decoding="async"
           onError={() => setFailed(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
-      </Box>
-    )
-  }
-
-  if (!scrolling && !failed && kind === 'video') {
-    return (
-      <Box style={thumbBox(size)}>
-        <video
-          src={api.contentUrl(entry.path)}
-          muted
-          preload="metadata"
-          playsInline
-          // Seek slightly in so we capture a real frame, not a black first frame.
-          onLoadedMetadata={(e) => {
-            try {
-              e.currentTarget.currentTime = Math.min(1, (e.currentTarget.duration || 0) * 0.1)
-            } catch {
-              /* ignore */
-            }
-          }}
-          onError={() => setFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-        <IconPlayerPlayFilled
-          size={size >= 40 ? 18 : 10}
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            color: '#fff',
-            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
-          }}
-        />
+        {kind === 'video' && (
+          <IconPlayerPlayFilled
+            size={size >= 40 ? 18 : 10}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              color: '#fff',
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+            }}
+          />
+        )}
       </Box>
     )
   }

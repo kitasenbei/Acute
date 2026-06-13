@@ -7,7 +7,7 @@ async function main(): Promise<void> {
   await fs.mkdir(config.dataDir, { recursive: true })
 
   const db = createDb(config.dbPath)
-  const app = createApp({ db, rootDir: config.rootDir })
+  const app = createApp({ db, rootDir: config.rootDir, cacheDir: config.thumbDir })
 
   app.listen(config.port, () => {
     console.log(`File explorer backend listening on http://localhost:${config.port}`)

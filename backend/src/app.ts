@@ -3,10 +3,13 @@ import cors from 'cors'
 import swaggerUi from 'swagger-ui-express'
 import type Database from 'better-sqlite3'
 import { openapiSpec } from './openapi.js'
+import os from 'node:os'
+import path from 'node:path'
 import { FileSystem } from './fs/fileSystem.js'
 import { FavoritesRepository } from './repositories/favoritesRepository.js'
 import { ExplorerService } from './services/explorerService.js'
 import { FavoritesService } from './services/favoritesService.js'
+import { ThumbnailService } from './services/thumbnailService.js'
 import { ExplorerController } from './controllers/explorerController.js'
 import { FavoritesController } from './controllers/favoritesController.js'
 import { createExplorerRouter, createFavoritesRouter } from './routes/index.js'
@@ -15,6 +18,8 @@ import { errorHandler } from './middleware/errorHandler.js'
 export interface AppDeps {
   db: Database.Database
   rootDir: string
+  /** Where generated thumbnails are cached. Defaults to a temp dir. */
+  cacheDir?: string
 }
 
 /**
@@ -23,15 +28,17 @@ export interface AppDeps {
  * Dependencies (the SQLite db and the browsing root) are injected so tests can
  * supply an in-memory DB and a throwaway temp directory.
  */
-export function createApp({ db, rootDir }: AppDeps): Express {
+export function createApp({ db, rootDir, cacheDir }: AppDeps): Express {
+  const thumbDir = cacheDir ?? path.join(os.tmpdir(), 'file-explorer-thumbnails')
   // Data tier
   const fileSystem = new FileSystem()
   const favoritesRepo = new FavoritesRepository(db)
   // Business tier
   const explorerService = new ExplorerService({ fileSystem, rootDir })
   const favoritesService = new FavoritesService({ repository: favoritesRepo, fileSystem, rootDir })
+  const thumbnailService = new ThumbnailService({ rootDir, cacheDir: thumbDir })
   // Presentation tier
-  const explorerController = new ExplorerController(explorerService)
+  const explorerController = new ExplorerController(explorerService, thumbnailService)
   const favoritesController = new FavoritesController(favoritesService)
 
   const app = express()
