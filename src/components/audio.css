@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--mantine-color-grape-6), var(--mantine-color-indigo-7));
+  background: linear-gradient(135deg, var(--mantine-color-gray-6), var(--mantine-color-gray-8));
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
