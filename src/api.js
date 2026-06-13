@@ -93,4 +93,43 @@ export const api = {
       return fetch(`${BASE}/api/favorites${q(path)}`, { method: 'DELETE' }).then(json)
     },
   },
+
+  tags: {
+    list() {
+      return fetch(`${BASE}/api/tags`).then(json)
+    },
+    create(name, color) {
+      return fetch(`${BASE}/api/tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      }).then(json)
+    },
+    update(id, changes) {
+      return fetch(`${BASE}/api/tags/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      }).then(json)
+    },
+    remove(id) {
+      return fetch(`${BASE}/api/tags/${id}`, { method: 'DELETE' }).then(json)
+    },
+    assignments() {
+      return fetch(`${BASE}/api/tags/assignments`).then(json)
+    },
+    assign(path, tagId) {
+      return fetch(`${BASE}/api/tags/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, tagId }),
+      }).then(json)
+    },
+    unassign(path, tagId) {
+      return fetch(
+        `${BASE}/api/tags/assignments${q(path)}&tagId=${encodeURIComponent(tagId)}`,
+        { method: 'DELETE' },
+      ).then(json)
+    },
+  },
 }

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import type { ExplorerController } from '../controllers/explorerController.js'
 import type { FavoritesController } from '../controllers/favoritesController.js'
+import type { TagsController } from '../controllers/tagsController.js'
 
 const upload = multer({ storage: multer.memoryStorage() })
 
@@ -22,5 +23,18 @@ export function createFavoritesRouter(controller: FavoritesController): Router {
   router.get('/', controller.list)
   router.post('/', controller.add)
   router.delete('/', controller.remove)
+  return router
+}
+
+export function createTagsRouter(controller: TagsController): Router {
+  const router = Router()
+  // Literal /assignments routes must come before the /:id params.
+  router.get('/assignments', controller.listAssignments)
+  router.post('/assignments', controller.assign)
+  router.delete('/assignments', controller.unassign)
+  router.get('/', controller.list)
+  router.post('/', controller.create)
+  router.patch('/:id', controller.update)
+  router.delete('/:id', controller.remove)
   return router
 }

@@ -25,3 +25,17 @@ export interface Favorite {
   name: string
   createdAt: string
 }
+
+/** A user-defined tag (label + colour). */
+export interface Tag {
+  id: string
+  name: string
+  color: string
+  createdAt: string
+}
+
+/** A tag applied to a file/folder, by root-relative path. */
+export interface TagAssignment {
+  path: string
+  tagId: string
+}

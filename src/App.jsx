@@ -33,6 +33,7 @@ import {
   IconStarFilled,
   IconFolder,
   IconSettings,
+  IconTags,
   IconDeviceDesktop,
   IconFiles,
   IconFile,
@@ -55,7 +56,12 @@ import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
+import { useTagsStore } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
+import { TagDots } from './components/TagManagerModal.jsx'
+
+// Shared empty array keeps untagged rows' `tags` prop referentially stable.
+const EMPTY_TAGS = []
 
 // Standard home subfolders a file explorer surfaces for quick access. Only the
 // ones that actually exist under the root are shown.
@@ -180,7 +186,7 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -215,6 +221,8 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
           </Text>
         )}
       </Box>
+
+      <TagDots tags={tags} />
 
       <Text size="xs" c="dimmed" w={70} ta="right">
         {isDir ? '' : formatBytes(entry.size)}
@@ -260,7 +268,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
   )
 })
 
-const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -314,6 +322,11 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, on
           </Text>
         )}
       </Box>
+      {tags?.length > 0 && (
+        <Group justify="center">
+          <TagDots tags={tags} />
+        </Group>
+      )}
     </Flex>
   )
 })
@@ -370,6 +383,11 @@ export default function App() {
   const zoomBy = useViewStore((s) => s.zoomBy)
   const openPreview = usePreviewStore((s) => s.open)
   const openContextMenu = useContextMenuStore((s) => s.open)
+  const tags = useTagsStore((s) => s.tags)
+  const assignments = useTagsStore((s) => s.assignments)
+  const loadTags = useTagsStore((s) => s.loadAll)
+  const toggleTag = useTagsStore((s) => s.toggleAssign)
+  const openTagManager = useTagsStore((s) => s.openManager)
 
   const load = useCallback(async (p, { silent } = {}) => {
     if (!silent) setLoading(true)
@@ -410,9 +428,9 @@ export default function App() {
       } catch (e) {
         setError(e.message)
       }
-      await Promise.all([load(''), loadFavorites(), loadPlaces()])
+      await Promise.all([load(''), loadFavorites(), loadPlaces(), loadTags()])
     })()
-  }, [load, loadFavorites, loadPlaces])
+  }, [load, loadFavorites, loadPlaces, loadTags])
 
   // Ctrl+wheel zooms thumbnails. A native non-passive listener is required so we
   // can preventDefault and stop Chromium's built-in page zoom.
@@ -433,6 +451,17 @@ export default function App() {
     [listing, showHidden],
   )
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
+
+  // Stable path -> Tag[] map so memoized rows only re-render when tags change.
+  const tagsByPath = useMemo(() => {
+    const byId = new Map(tags.map((t) => [t.id, t]))
+    const map = new Map()
+    for (const [p, ids] of Object.entries(assignments)) {
+      const list = ids.map((id) => byId.get(id)).filter(Boolean)
+      if (list.length) map.set(p, list)
+    }
+    return map
+  }, [tags, assignments])
 
   const run = useCallback(
     async (fn) => {
@@ -537,6 +566,19 @@ export default function App() {
     }
     items.push({ label: 'Rename', icon: IconPencil, onClick: () => setEditingPath(entry.path) })
 
+    // Tags: toggle each tag for this entry, plus a shortcut to the manager.
+    items.push({ divider: true })
+    const assigned = new Set(assignments[entry.path] || [])
+    for (const tag of tags) {
+      items.push({
+        label: tag.name,
+        dot: tag.color,
+        checked: assigned.has(tag.id),
+        onClick: () => toggleTag(entry.path, tag.id),
+      })
+    }
+    items.push({ label: 'Manage tags…', icon: IconTags, onClick: openTagManager })
+
     items.push({ divider: true })
     items.push({
       label: 'Delete',
@@ -545,7 +587,7 @@ export default function App() {
       onClick: () => run(() => api.remove(entry.path)),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -566,6 +608,7 @@ export default function App() {
     editing: editingPath === entry.path,
     pinned: favSet.has(entry.path),
     zoom,
+    tags: tagsByPath.get(entry.path) ?? EMPTY_TAGS,
     onOpen: handleOpen,
     onOpenFile: handleOpenFile,
     onStartEdit: setEditingPath,
@@ -635,6 +678,7 @@ export default function App() {
             />
           ))}
         </Box>
+        <SidebarItem icon={IconTags} label="Tags" onClick={() => openTagManager()} />
         <SidebarItem icon={IconSettings} label="Settings" onClick={() => openSettings()} />
       </Flex>
 

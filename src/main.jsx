@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { SettingsModal } from './components/SettingsModal.jsx'
 import { PreviewModal } from './components/PreviewModal.jsx'
 import { ContextMenu } from './components/ContextMenu.jsx'
+import { TagManagerModal } from './components/TagManagerModal.jsx'
 import { useSettingsStore } from './stores/settingsStore.js'
 
 /** Pushes the zustand `appearance` preference into Mantine's color scheme. */
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <SettingsModal />
       <PreviewModal />
       <ContextMenu />
+      <TagManagerModal />
     </MantineProvider>
   </React.StrictMode>,
 )

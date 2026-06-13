@@ -1,4 +1,5 @@
-import { Menu } from '@mantine/core'
+import { Menu, ColorSwatch } from '@mantine/core'
+import { IconCheck } from '@tabler/icons-react'
 import { useContextMenuStore } from '../stores/contextMenuStore.js'
 
 /**
@@ -22,11 +23,17 @@ export function ContextMenu() {
         {items.map((item, i) => {
           if (item.divider) return <Menu.Divider key={`divider-${i}`} />
           const Icon = item.icon
+          const leftSection = item.dot ? (
+            <ColorSwatch color={item.dot} size={12} />
+          ) : Icon ? (
+            <Icon size={16} />
+          ) : null
           return (
             <Menu.Item
               key={item.label}
               color={item.color}
-              leftSection={Icon ? <Icon size={16} /> : null}
+              leftSection={leftSection}
+              rightSection={item.checked ? <IconCheck size={14} /> : null}
               onClick={() => {
                 close()
                 item.onClick?.()

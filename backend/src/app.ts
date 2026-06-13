@@ -7,12 +7,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { FileSystem } from './fs/fileSystem.js'
 import { FavoritesRepository } from './repositories/favoritesRepository.js'
+import { TagsRepository } from './repositories/tagsRepository.js'
 import { ExplorerService } from './services/explorerService.js'
 import { FavoritesService } from './services/favoritesService.js'
+import { TagService } from './services/tagService.js'
 import { ThumbnailService } from './services/thumbnailService.js'
 import { ExplorerController } from './controllers/explorerController.js'
 import { FavoritesController } from './controllers/favoritesController.js'
-import { createExplorerRouter, createFavoritesRouter } from './routes/index.js'
+import { TagsController } from './controllers/tagsController.js'
+import { createExplorerRouter, createFavoritesRouter, createTagsRouter } from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 export interface AppDeps {
@@ -33,13 +36,16 @@ export function createApp({ db, rootDir, cacheDir }: AppDeps): Express {
   // Data tier
   const fileSystem = new FileSystem()
   const favoritesRepo = new FavoritesRepository(db)
+  const tagsRepo = new TagsRepository(db)
   // Business tier
   const explorerService = new ExplorerService({ fileSystem, rootDir })
   const favoritesService = new FavoritesService({ repository: favoritesRepo, fileSystem, rootDir })
+  const tagService = new TagService({ repository: tagsRepo })
   const thumbnailService = new ThumbnailService({ rootDir, cacheDir: thumbDir })
   // Presentation tier
   const explorerController = new ExplorerController(explorerService, thumbnailService)
   const favoritesController = new FavoritesController(favoritesService)
+  const tagsController = new TagsController(tagService)
 
   const app = express()
   app.use(cors({ exposedHeaders: ['Content-Disposition'] }))
@@ -53,6 +59,7 @@ export function createApp({ db, rootDir, cacheDir }: AppDeps): Express {
 
   app.use('/api/fs', createExplorerRouter(explorerController))
   app.use('/api/favorites', createFavoritesRouter(favoritesController))
+  app.use('/api/tags', createTagsRouter(tagsController))
 
   app.use(errorHandler)
   return app
