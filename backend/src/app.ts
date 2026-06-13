@@ -45,7 +45,7 @@ export function createApp({ db, rootDir, cacheDir }: AppDeps): Express {
   // Presentation tier
   const explorerController = new ExplorerController(explorerService, thumbnailService)
   const favoritesController = new FavoritesController(favoritesService)
-  const tagsController = new TagsController(tagService)
+  const tagsController = new TagsController(tagService, explorerService)
 
   const app = express()
   app.use(cors({ exposedHeaders: ['Content-Disposition'] }))

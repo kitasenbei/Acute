@@ -6,6 +6,7 @@ import {
   Flex,
   Group,
   Loader,
+  ColorSwatch,
   SegmentedControl,
   Text,
   TextInput,
@@ -331,7 +332,7 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, ta
   )
 })
 
-function SidebarItem({ icon: Icon, label, active, onClick, onUnpin }) {
+function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin }) {
   const [hover, setHover] = useState(false)
   return (
     <Flex
@@ -348,7 +349,11 @@ function SidebarItem({ icon: Icon, label, active, onClick, onUnpin }) {
         background: active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
-      <Icon size={17} color="var(--mantine-color-dimmed)" />
+      {dot ? (
+        <ColorSwatch color={dot} size={11} style={{ marginLeft: 3, marginRight: 3 }} />
+      ) : (
+        <Icon size={17} color="var(--mantine-color-dimmed)" />
+      )}
       <Text size="sm" truncate style={{ flex: 1 }}>
         {label}
       </Text>
@@ -371,6 +376,7 @@ export default function App() {
   const [editingPath, setEditingPath] = useState(null)
   const [creating, setCreating] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [activeTagId, setActiveTagId] = useState(null)
   const resetRef = useRef(null)
   const contentRef = useRef(null)
   const scrollRef = useRef(null)
@@ -394,6 +400,22 @@ export default function App() {
     try {
       setListing(await api.list(p))
       setPath(p)
+      setActiveTagId(null) // navigating a directory clears any tag filter
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Show every file/folder carrying a tag, across directories.
+  const loadTag = useCallback(async (tagId, { silent } = {}) => {
+    if (!silent) setLoading(true)
+    try {
+      const { entries } = await api.tags.files(tagId)
+      setListing({ path: '', parent: null, entries })
+      setActiveTagId(tagId)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -451,6 +473,7 @@ export default function App() {
     [listing, showHidden],
   )
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
+  const activeTag = activeTagId ? tags.find((t) => t.id === activeTagId) : null
 
   // Stable path -> Tag[] map so memoized rows only re-render when tags change.
   const tagsByPath = useMemo(() => {
@@ -467,13 +490,18 @@ export default function App() {
     async (fn) => {
       try {
         await fn()
-        await load(path, { silent: true })
+        await (activeTagId ? loadTag(activeTagId, { silent: true }) : load(path, { silent: true }))
       } catch (e) {
         setError(e.message)
       }
     },
-    [load, path],
+    [load, loadTag, path, activeTagId],
   )
+
+  // Keep the tag view fresh when assignments change (e.g. untagging from here).
+  useEffect(() => {
+    if (activeTagId) loadTag(activeTagId, { silent: true })
+  }, [assignments, activeTagId, loadTag])
 
   const uploadAll = useCallback(
     (fileList) =>
@@ -677,6 +705,16 @@ export default function App() {
               onUnpin={() => unpin(fav.path)}
             />
           ))}
+          {tags.length > 0 && <Divider my={6} />}
+          {tags.map((t) => (
+            <SidebarItem
+              key={t.id}
+              dot={t.color}
+              label={t.name}
+              active={activeTagId === t.id}
+              onClick={() => loadTag(t.id)}
+            />
+          ))}
         </Box>
         <SidebarItem icon={IconTags} label="Tags" onClick={() => openTagManager()} />
         <SidebarItem icon={IconSettings} label="Settings" onClick={() => openSettings()} />
@@ -689,18 +727,31 @@ export default function App() {
         style={{ flex: 1, minWidth: 0, outline: dragOver ? '2px dashed var(--mantine-color-blue-5)' : 'none', outlineOffset: -8 }}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadAll(e.dataTransfer.files) }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!activeTagId) uploadAll(e.dataTransfer.files) }}
       >
         <Flex align="center" justify="space-between" gap="sm" px="md" h={52}
           style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
           <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
             <Tooltip label="Up" openDelay={400}>
-              <ActionIcon variant="subtle" color="gray" disabled={!path}
+              <ActionIcon variant="subtle" color="gray" disabled={!path || !!activeTagId}
                 onClick={() => listing?.parent != null && load(listing.parent)}>
                 <IconArrowUp size={18} />
               </ActionIcon>
             </Tooltip>
-            <Breadcrumbs path={path} onNavigate={load} />
+            {activeTagId ? (
+              <Group gap={6} wrap="nowrap">
+                <ActionIcon variant="subtle" color="gray" onClick={() => load('')}>
+                  <IconHome size={16} />
+                </ActionIcon>
+                <IconChevronRight size={14} color="var(--mantine-color-dimmed)" />
+                {activeTag && <ColorSwatch color={activeTag.color} size={12} />}
+                <Text size="sm" fw={600} truncate>
+                  {activeTag?.name ?? 'Tag'}
+                </Text>
+              </Group>
+            ) : (
+              <Breadcrumbs path={path} onNavigate={load} />
+            )}
           </Group>
           <Group gap={8} wrap="nowrap">
             <SegmentedControl
@@ -723,19 +774,20 @@ export default function App() {
               </ActionIcon>
             </Tooltip>
             <Tooltip label="New folder" openDelay={400}>
-              <ActionIcon variant="subtle" color="gray" onClick={() => setCreating(true)}>
+              <ActionIcon variant="subtle" color="gray" disabled={!!activeTagId} onClick={() => setCreating(true)}>
                 <IconFolderPlus size={18} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Refresh" openDelay={400}>
-              <ActionIcon variant="subtle" color="gray" onClick={() => load(path, { silent: true })}>
+              <ActionIcon variant="subtle" color="gray"
+                onClick={() => (activeTagId ? loadTag(activeTagId, { silent: true }) : load(path, { silent: true }))}>
                 <IconRefresh size={18} />
               </ActionIcon>
             </Tooltip>
-            <FileButton resetRef={resetRef} onChange={uploadAll} multiple>
+            <FileButton resetRef={resetRef} onChange={uploadAll} multiple disabled={!!activeTagId}>
               {(props) => (
                 <Tooltip label="Upload" openDelay={400}>
-                  <ActionIcon {...props} variant="light">
+                  <ActionIcon {...props} variant="light" disabled={!!activeTagId}>
                     <IconUpload size={18} />
                   </ActionIcon>
                 </Tooltip>

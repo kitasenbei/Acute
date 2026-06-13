@@ -118,6 +118,9 @@ export const api = {
     assignments() {
       return fetch(`${BASE}/api/tags/assignments`).then(json)
     },
+    files(id) {
+      return fetch(`${BASE}/api/tags/${id}/files`).then(json)
+    },
     assign(path, tagId) {
       return fetch(`${BASE}/api/tags/assignments`, {
         method: 'POST',

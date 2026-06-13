@@ -22,6 +22,18 @@ export class TagService {
     return this.repository.findAll()
   }
 
+  getTag(id: string): Tag {
+    const tag = this.repository.findById(id)
+    if (!tag) throw new NotFoundError(`Tag ${id} not found`)
+    return tag
+  }
+
+  /** Root-relative paths currently carrying this tag. */
+  pathsForTag(id: string): string[] {
+    this.getTag(id)
+    return this.repository.pathsForTag(id)
+  }
+
   createTag(name: string, color?: string): Tag {
     const tag: Tag = {
       id: randomUUID(),

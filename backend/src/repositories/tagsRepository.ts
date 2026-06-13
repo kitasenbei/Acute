@@ -61,4 +61,11 @@ export class TagsRepository {
   unassign(path: string, tagId: string): void {
     this.db.prepare(`DELETE FROM file_tags WHERE path = ? AND tag_id = ?`).run(path, tagId)
   }
+
+  pathsForTag(tagId: string): string[] {
+    const rows = this.db
+      .prepare(`SELECT path FROM file_tags WHERE tag_id = ?`)
+      .all(tagId) as { path: string }[]
+    return rows.map((r) => r.path)
+  }
 }

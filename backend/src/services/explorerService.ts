@@ -89,6 +89,21 @@ export class ExplorerService {
     return this.entryOf(abs)
   }
 
+  /** Build entries for a set of root-relative paths, skipping any that are
+   * missing. Used by views that span directories (e.g. tag filters). */
+  async entriesForPaths(relPaths: string[]): Promise<Entry[]> {
+    const entries = await Promise.all(
+      relPaths.map(async (rel) => {
+        try {
+          return await this.entryOf(this.resolver.toAbsolute(rel))
+        } catch {
+          return null
+        }
+      }),
+    )
+    return entries.filter((e): e is Entry => e !== null).sort(byFolderThenName)
+  }
+
   async getFileContent(relPath: string): Promise<FileContent> {
     const abs = this.resolver.toAbsolute(relPath)
     const stat = await this.statOrThrow(abs)

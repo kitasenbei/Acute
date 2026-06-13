@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import type { TagService } from '../services/tagService.js'
+import type { ExplorerService } from '../services/explorerService.js'
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>
 
@@ -13,10 +14,19 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** Presentation tier for tags and tag assignments. */
 export class TagsController {
-  constructor(private readonly service: TagService) {}
+  constructor(
+    private readonly service: TagService,
+    private readonly explorer: ExplorerService,
+  ) {}
 
   list = wrap(async (_req, res) => {
     res.json(this.service.listTags())
+  })
+
+  files = wrap(async (req, res) => {
+    const tag = this.service.getTag(req.params.id)
+    const entries = await this.explorer.entriesForPaths(this.service.pathsForTag(tag.id))
+    res.json({ tag, entries })
   })
 
   create = wrap(async (req, res) => {

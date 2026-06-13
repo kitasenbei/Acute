@@ -106,6 +106,17 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
     expect((await request(app).get('/api/favorites')).body).toHaveLength(0)
   })
 
+  it('lists files carrying a tag', async () => {
+    const tag = (await request(app).post('/api/tags').send({ name: 'Keep' })).body
+    await request(app).post('/api/tags/assignments').send({ path: 'notes.txt', tagId: tag.id })
+    await request(app).post('/api/tags/assignments').send({ path: 'Docs', tagId: tag.id })
+
+    const res = await request(app).get(`/api/tags/${tag.id}/files`)
+    expect(res.status).toBe(200)
+    expect(res.body.tag.name).toBe('Keep')
+    expect(res.body.entries.map((e: { name: string }) => e.name).sort()).toEqual(['Docs', 'notes.txt'])
+  })
+
   it('serves the OpenAPI spec and Swagger UI', async () => {
     const spec = await request(app).get('/api/docs.json')
     expect(spec.status).toBe(200)
