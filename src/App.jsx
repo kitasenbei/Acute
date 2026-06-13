@@ -45,13 +45,14 @@ import {
   IconMusic,
   IconMovie,
   IconCode,
+  IconPlayerPlayFilled,
   IconLayoutList,
   IconLayoutRows,
   IconLayoutGrid,
 } from '@tabler/icons-react'
 import { api } from './api.js'
 import { formatBytes, formatDate } from './util.js'
-import { EXT } from './fileTypes.js'
+import { EXT, fileKind } from './fileTypes.js'
 import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
@@ -81,30 +82,26 @@ function iconForEntry(entry) {
   return { Icon: IconFile, color: 'gray' }
 }
 
-function isImage(entry) {
-  if (entry.type !== 'file') return false
-  const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
-  return EXT.image.includes(ext)
-}
+const thumbBox = (size) => ({
+  width: size,
+  height: size,
+  borderRadius: 8,
+  overflow: 'hidden',
+  flexShrink: 0,
+  background: 'var(--mantine-color-default-hover)',
+  position: 'relative',
+})
 
-/** A square preview: a real image thumbnail for image files, otherwise the
- * type icon. Falls back to the icon if the image fails to load. */
+/** A square preview: a real thumbnail for image/video files, otherwise the
+ * type icon. Falls back to the icon if the media fails to load. */
 function Thumb({ entry, size, iconSize }) {
   const { Icon, color } = iconForEntry(entry)
   const [failed, setFailed] = useState(false)
+  const kind = fileKind(entry)
 
-  if (isImage(entry) && !failed) {
+  if (!failed && kind === 'image') {
     return (
-      <Box
-        style={{
-          width: size,
-          height: size,
-          borderRadius: 8,
-          overflow: 'hidden',
-          flexShrink: 0,
-          background: 'var(--mantine-color-default-hover)',
-        }}
-      >
+      <Box style={thumbBox(size)}>
         <img
           src={api.contentUrl(entry.path)}
           alt={entry.name}
@@ -115,6 +112,41 @@ function Thumb({ entry, size, iconSize }) {
       </Box>
     )
   }
+
+  if (!failed && kind === 'video') {
+    return (
+      <Box style={thumbBox(size)}>
+        <video
+          src={api.contentUrl(entry.path)}
+          muted
+          preload="metadata"
+          playsInline
+          // Seek slightly in so we capture a real frame, not a black first frame.
+          onLoadedMetadata={(e) => {
+            try {
+              e.currentTarget.currentTime = Math.min(1, (e.currentTarget.duration || 0) * 0.1)
+            } catch {
+              /* ignore */
+            }
+          }}
+          onError={() => setFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+        <IconPlayerPlayFilled
+          size={size >= 40 ? 18 : 10}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            color: '#fff',
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
+          }}
+        />
+      </Box>
+    )
+  }
+
   return (
     <ThemeIcon variant="light" color={color} size={size} radius="md">
       <Icon size={iconSize} />
