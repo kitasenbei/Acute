@@ -23,26 +23,30 @@ function TagNode({ tag, depth, tree, activeTagId, onSelect }) {
           cursor: 'pointer',
           background: active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
         }}
-        onClick={() => onSelect(tag.id)}
+        onClick={() => {
+          onSelect(tag.id)
+          if (children.length > 0) toggleCollapse(tag.id)
+        }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
       >
         {children.length > 0 ? (
           <Box
             onClick={(e) => {
+              // Toggle without changing the active filter.
               e.stopPropagation()
               toggleCollapse(tag.id)
             }}
-            style={{ display: 'flex', alignItems: 'center' }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0 }}
           >
             <IconChevronRight
-              size={13}
+              size={14}
               color="var(--mantine-color-dimmed)"
               style={{ transform: collapsed ? 'none' : 'rotate(90deg)', transition: 'transform 120ms' }}
             />
           </Box>
         ) : (
-          <Box w={13} />
+          <Box w={20} />
         )}
         <ColorSwatch color={tag.color} size={11} />
         <Text size="sm" truncate style={{ flex: 1 }}>
