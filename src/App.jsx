@@ -24,6 +24,12 @@ import {
   IconArrowsSort,
   IconRefresh,
   IconFolderPlus,
+  IconFilePlus,
+  IconPlus,
+  IconScissors,
+  IconCopy,
+  IconCopyPlus,
+  IconClipboard,
   IconUpload,
   IconChevronRight,
   IconEye,
@@ -60,6 +66,7 @@ import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
+import { useClipboardStore } from './stores/clipboardStore.js'
 import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
 import { TagChips } from './components/TagManagerModal.jsx'
@@ -395,7 +402,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editingPath, setEditingPath] = useState(null)
-  const [creating, setCreating] = useState(false)
+  const [creating, setCreating] = useState(null) // 'folder' | 'file' | null
   const [dragOver, setDragOver] = useState(false)
   const [activeTagId, setActiveTagId] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
@@ -416,6 +423,10 @@ export default function App() {
   const zoomBy = useViewStore((s) => s.zoomBy)
   const openPreview = usePreviewStore((s) => s.open)
   const openContextMenu = useContextMenuStore((s) => s.open)
+  const clipItems = useClipboardStore((s) => s.items)
+  const clipMode = useClipboardStore((s) => s.mode)
+  const setClipboard = useClipboardStore((s) => s.setClipboard)
+  const clearClipboard = useClipboardStore((s) => s.clear)
   const tags = useTagsStore((s) => s.tags)
   const assignments = useTagsStore((s) => s.assignments)
   const loadTags = useTagsStore((s) => s.loadAll)
@@ -554,12 +565,28 @@ export default function App() {
 
   const commitCreate = useCallback(
     (value) => {
-      setCreating(false)
+      const type = creating
+      setCreating(null)
       const name = value.trim()
       if (!name) return
-      run(() => api.createFolder(path, name))
+      run(() => (type === 'file' ? api.createFile(path, name) : api.createFolder(path, name)))
     },
-    [run, path],
+    [run, path, creating],
+  )
+
+  // Paste the clipboard into a destination directory (move on cut, copy on copy).
+  const paste = useCallback(
+    (destDir) =>
+      run(async () => {
+        if (!clipItems.length) return
+        if (clipMode === 'cut') {
+          await api.move(clipItems, destDir)
+          clearClipboard()
+        } else {
+          await api.copy(clipItems, destDir)
+        }
+      }),
+    [run, clipItems, clipMode, clearClipboard],
   )
 
   const togglePin = useCallback(
@@ -581,71 +608,64 @@ export default function App() {
     [run, loadFavorites],
   )
 
-  // Build the right-click action list for an entry. Files and folders differ;
-  // native actions only appear when running inside Electron.
+  // Build the right-click action list for an entry. Acts on the whole selection
+  // when right-clicking a selected item (and more than one is selected).
   const buildMenuItems = useCallback((entry) => {
     const isDir = entry.type === 'dir'
+    const targets = selected.has(entry.path) && selected.size > 1 ? [...selected] : [entry.path]
+    const many = targets.length > 1
     const items = []
 
-    items.push(
-      isDir
-        ? { label: 'Open', icon: IconFolderOpen, onClick: () => load(entry.path) }
-        : { label: 'Open', icon: IconEye, onClick: () => openPreview(entry) },
-    )
-
-    if (window.native) {
-      items.push({
-        label: 'Open with default app',
-        icon: IconExternalLink,
-        onClick: () => window.native.openPath(entry.path),
-      })
-      items.push({
-        label: 'Reveal in file manager',
-        icon: IconFolderOpen,
-        onClick: () => window.native.showInFolder(entry.path),
-      })
+    if (!many) {
+      items.push(
+        isDir
+          ? { label: 'Open', icon: IconFolderOpen, onClick: () => load(entry.path) }
+          : { label: 'Open', icon: IconEye, onClick: () => openPreview(entry) },
+      )
+      if (window.native) {
+        items.push({ label: 'Open with default app', icon: IconExternalLink, onClick: () => window.native.openPath(entry.path) })
+        items.push({ label: 'Reveal in file manager', icon: IconFolderOpen, onClick: () => window.native.showInFolder(entry.path) })
+      }
+      items.push({ divider: true })
     }
+
+    // Clipboard ops (work on the whole target set).
+    items.push({ label: many ? `Cut ${targets.length} items` : 'Cut', icon: IconScissors, onClick: () => setClipboard(targets, 'cut') })
+    items.push({ label: many ? `Copy ${targets.length} items` : 'Copy', icon: IconCopy, onClick: () => setClipboard(targets, 'copy') })
+    if (isDir && clipItems.length) {
+      items.push({ label: `Paste (${clipItems.length})`, icon: IconClipboard, onClick: () => paste(entry.path) })
+    }
+    if (!many) items.push({ label: 'Duplicate', icon: IconCopyPlus, onClick: () => run(() => api.duplicate(entry.path)) })
 
     items.push({ divider: true })
 
-    if (isDir) {
-      const pinned = favSet.has(entry.path)
-      items.push({
-        label: pinned ? 'Unpin' : 'Pin',
-        icon: pinned ? IconStarFilled : IconStar,
-        onClick: () => togglePin(entry),
-      })
-    } else {
-      items.push({
-        label: 'Download',
-        icon: IconDownload,
-        onClick: () => api.download(entry).catch((err) => setError(err.message)),
-      })
-    }
-    items.push({ label: 'Rename', icon: IconPencil, onClick: () => setEditingPath(entry.path) })
+    if (!many) {
+      if (isDir) {
+        const pinned = favSet.has(entry.path)
+        items.push({ label: pinned ? 'Unpin' : 'Pin', icon: pinned ? IconStarFilled : IconStar, onClick: () => togglePin(entry) })
+      } else {
+        items.push({ label: 'Download', icon: IconDownload, onClick: () => api.download(entry).catch((err) => setError(err.message)) })
+      }
+      items.push({ label: 'Rename', icon: IconPencil, onClick: () => setEditingPath(entry.path) })
 
-    // Tags: toggle each tag for this entry, plus a shortcut to the manager.
-    items.push({ divider: true })
-    const assigned = new Set(assignments[entry.path] || [])
-    for (const tag of tags) {
-      items.push({
-        label: tagTree.pathName(tag),
-        dot: tag.color,
-        checked: assigned.has(tag.id),
-        onClick: () => toggleTag(entry.path, tag.id),
-      })
+      // Tags: toggle each tag for this entry, plus a shortcut to the manager.
+      items.push({ divider: true })
+      const assigned = new Set(assignments[entry.path] || [])
+      for (const tag of tags) {
+        items.push({ label: tagTree.pathName(tag), dot: tag.color, checked: assigned.has(tag.id), onClick: () => toggleTag(entry.path, tag.id) })
+      }
+      items.push({ label: 'Manage tags…', icon: IconTags, onClick: openTagManager })
     }
-    items.push({ label: 'Manage tags…', icon: IconTags, onClick: openTagManager })
 
     items.push({ divider: true })
     items.push({
-      label: 'Delete',
+      label: many ? `Delete ${targets.length} items` : 'Delete',
       icon: IconTrash,
       color: 'red',
-      onClick: () => run(() => api.remove(entry.path)),
+      onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -761,13 +781,13 @@ export default function App() {
   const createInput = (
     <TextInput
       size="xs"
-      placeholder="Folder name"
+      placeholder={creating === 'file' ? 'File name' : 'Folder name'}
       autoFocus
       style={{ width: '100%' }}
       onBlur={(e) => commitCreate(e.currentTarget.value)}
       onKeyDown={(e) => {
         if (e.key === 'Enter') commitCreate(e.currentTarget.value)
-        if (e.key === 'Escape') setCreating(false)
+        if (e.key === 'Escape') setCreating(null)
       }}
     />
   )
@@ -914,11 +934,28 @@ export default function App() {
                 {showHidden ? <IconEye size={18} /> : <IconEyeOff size={18} />}
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="New folder" openDelay={400}>
-              <ActionIcon variant="subtle" color="gray" disabled={!!activeTagId} onClick={() => setCreating(true)}>
-                <IconFolderPlus size={18} />
-              </ActionIcon>
-            </Tooltip>
+            <Menu shadow="md" width={190} position="bottom-end">
+              <Menu.Target>
+                <Tooltip label="New / Paste" openDelay={400}>
+                  <ActionIcon variant="subtle" color="gray" disabled={!!activeTagId}>
+                    <IconPlus size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item leftSection={<IconFolderPlus size={16} />} onClick={() => setCreating('folder')}>
+                  New folder
+                </Menu.Item>
+                <Menu.Item leftSection={<IconFilePlus size={16} />} onClick={() => setCreating('file')}>
+                  New file
+                </Menu.Item>
+                {clipItems.length > 0 && (
+                  <Menu.Item leftSection={<IconClipboard size={16} />} onClick={() => paste(path)}>
+                    Paste ({clipItems.length})
+                  </Menu.Item>
+                )}
+              </Menu.Dropdown>
+            </Menu>
             <Tooltip label="Refresh" openDelay={400}>
               <ActionIcon variant="subtle" color="gray"
                 onClick={() => (activeTagId ? loadTag(activeTagId, { silent: true }) : load(path, { silent: true }))}>
@@ -948,8 +985,8 @@ export default function App() {
         {creating && (
           <Flex align="center" gap="sm" px="md" py={7}
             style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-            <ThemeIcon variant="light" color="yellow" size={32} radius="md">
-              <IconFolder size={18} />
+            <ThemeIcon variant="light" color={creating === 'file' ? 'gray' : 'yellow'} size={32} radius="md">
+              {creating === 'file' ? <IconFile size={18} /> : <IconFolder size={18} />}
             </ThemeIcon>
             {createInput}
           </Flex>

@@ -37,6 +37,38 @@ export const api = {
     }).then(json)
   },
 
+  createFile(path, name) {
+    return fetch(`${BASE}/api/fs/file`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, name }),
+    }).then(json)
+  },
+
+  duplicate(path) {
+    return fetch(`${BASE}/api/fs/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    }).then(json)
+  },
+
+  copy(paths, destDir) {
+    return fetch(`${BASE}/api/fs/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths, destDir }),
+    }).then(json)
+  },
+
+  move(paths, destDir) {
+    return fetch(`${BASE}/api/fs/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths, destDir }),
+    }).then(json)
+  },
+
   upload(path, file) {
     const form = new FormData()
     form.append('path', path ?? '')
