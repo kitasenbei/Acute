@@ -120,15 +120,20 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
     <Box style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <Stack align="center" gap="lg" w={380} maw="100%">
         <Box className="audio-art">
-          {playing ? (
-            <Box className="audio-eq">
+          {/* Note fades in only after the bars have dropped (delay on show). */}
+          <Box
+            className="audio-art-layer"
+            style={{ opacity: playing ? 0 : 1, transitionDelay: playing ? '0ms' : '360ms' }}
+          >
+            <IconMusic size={72} color="var(--mantine-color-dimmed)" />
+          </Box>
+          <Box className="audio-art-layer">
+            <Box className={`audio-eq${playing ? '' : ' paused'}`}>
               {[0, 1, 2, 3].map((i) => (
                 <span key={i} style={{ animationDelay: `${i * 0.15}s` }} />
               ))}
             </Box>
-          ) : (
-            <IconMusic size={72} color="var(--mantine-color-dimmed)" />
-          )}
+          </Box>
         </Box>
 
         <MarqueeTitle text={name} />
