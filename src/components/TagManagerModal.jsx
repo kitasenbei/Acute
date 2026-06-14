@@ -5,12 +5,16 @@ import {
   Group,
   Text,
   TextInput,
-  ColorInput,
   Select,
   Button,
   ActionIcon,
   Badge,
   Center,
+  Popover,
+  ColorSwatch,
+  UnstyledButton,
+  ScrollArea,
+  Box,
 } from '@mantine/core'
 import { IconTrash, IconTags, IconTagFilled } from '@tabler/icons-react'
 import { useTagsStore, buildTagTree } from '../stores/tagsStore.js'
@@ -22,22 +26,58 @@ const PALETTE = [
   '#495057', '#868e96',
 ]
 
-function TagRow({ tag, depth, parentOptions, onRename, onRecolor, onReparent, onDelete }) {
+/** Compact colour picker: a swatch that opens a palette popover. */
+function ColorPick({ value, onChange }) {
   return (
-    <Group gap="sm" wrap="nowrap" style={{ paddingLeft: depth * 18 }}>
-      <ColorInput
-        value={tag.color}
-        onChangeEnd={(c) => c && onRecolor(tag, c)}
-        format="hex"
-        size="xs"
-        w={120}
-        swatches={PALETTE}
-        withEyeDropper={false}
-      />
+    <Popover position="bottom-start" shadow="md" withinPortal>
+      <Popover.Target>
+        <UnstyledButton style={{ display: 'flex', flexShrink: 0 }} aria-label="Pick colour">
+          <ColorSwatch color={value} size={22} style={{ cursor: 'pointer' }}>
+            <IconTagFilled size={12} color="var(--mantine-color-white)" style={{ opacity: 0.9 }} />
+          </ColorSwatch>
+        </UnstyledButton>
+      </Popover.Target>
+      <Popover.Dropdown p="xs">
+        <Group gap={6} style={{ maxWidth: 156 }}>
+          {PALETTE.map((c) => (
+            <ColorSwatch
+              key={c}
+              color={c}
+              size={22}
+              style={{ cursor: 'pointer', outline: c === value ? '2px solid var(--mantine-color-default-border)' : 'none', outlineOffset: 2 }}
+              onClick={() => onChange(c)}
+            />
+          ))}
+        </Group>
+      </Popover.Dropdown>
+    </Popover>
+  )
+}
+
+function TagRow({ tag, depth, parentOptions, onRename, onRecolor, onReparent, onDelete }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <Group
+      gap="sm"
+      wrap="nowrap"
+      px="xs"
+      py={5}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        marginLeft: depth * 18,
+        borderRadius: 8,
+        borderLeft: depth > 0 ? '2px solid var(--mantine-color-default-border)' : undefined,
+        background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
+      }}
+    >
+      <ColorPick value={tag.color} onChange={(c) => onRecolor(tag, c)} />
       <TextInput
+        variant="unstyled"
         defaultValue={tag.name}
-        size="xs"
+        size="sm"
         style={{ flex: 1 }}
+        styles={{ input: { fontWeight: 500 } }}
         onBlur={(e) => onRename(tag, e.currentTarget.value)}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
@@ -49,6 +89,7 @@ function TagRow({ tag, depth, parentOptions, onRename, onRecolor, onReparent, on
         value={tag.parentId ?? ''}
         onChange={(v) => onReparent(tag, v || null)}
         comboboxProps={{ withinPortal: true }}
+        clearable
       />
       <ActionIcon variant="subtle" color="red" onClick={() => onDelete(tag)}>
         <IconTrash size={16} />
@@ -114,76 +155,97 @@ export function TagManagerModal() {
   }
 
   return (
-    <Modal opened={opened} onClose={close} title="Tags" size="lg" radius="lg" centered>
-      <Stack gap="md">
-        {/* Create */}
-        <Group gap="sm" wrap="nowrap" align="flex-end">
-          <ColorInput
-            value={color}
-            onChange={setColor}
-            format="hex"
-            size="xs"
-            w={120}
-            swatches={PALETTE}
-            withEyeDropper={false}
-          />
-          <TextInput
-            placeholder="New tag name"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            onKeyDown={(e) => e.key === 'Enter' && add()}
-            size="xs"
-            style={{ flex: 1 }}
-          />
-          <Select
-            size="xs"
-            w={150}
-            placeholder="Top level"
-            data={allParentOptions}
-            value={parentId}
-            onChange={(v) => {
-              setParentId(v || '')
-              // Default the new tag's colour to its parent's.
-              const parent = v && tags.find((t) => t.id === v)
-              if (parent) setColor(parent.color)
-            }}
-            comboboxProps={{ withinPortal: true }}
-            clearable
-          />
-          <Button size="xs" onClick={add} disabled={!name.trim()}>
-            Add
-          </Button>
+    <Modal
+      opened={opened}
+      onClose={close}
+      size="lg"
+      radius="lg"
+      centered
+      title={
+        <Group gap="xs">
+          <IconTags size={18} />
+          <Text fw={600}>Tags</Text>
         </Group>
-
-        {error && (
-          <Text size="xs" c="red">
-            {error}
+      }
+    >
+      <Stack gap="lg">
+        {/* Create */}
+        <Box>
+          <Text size="xs" c="dimmed" fw={600} mb={6}>
+            New tag
           </Text>
-        )}
+          <Group
+            gap="sm"
+            wrap="nowrap"
+            p="xs"
+            style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 10 }}
+          >
+            <ColorPick value={color} onChange={setColor} />
+            <TextInput
+              variant="unstyled"
+              placeholder="Tag name"
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+              onKeyDown={(e) => e.key === 'Enter' && add()}
+              size="sm"
+              style={{ flex: 1 }}
+            />
+            <Select
+              size="xs"
+              w={150}
+              placeholder="Top level"
+              data={allParentOptions}
+              value={parentId}
+              onChange={(v) => {
+                setParentId(v || '')
+                // Default the new tag's colour to its parent's.
+                const parent = v && tags.find((t) => t.id === v)
+                if (parent) setColor(parent.color)
+              }}
+              comboboxProps={{ withinPortal: true }}
+              clearable
+            />
+            <Button size="xs" onClick={add} disabled={!name.trim()}>
+              Add
+            </Button>
+          </Group>
+          {error && (
+            <Text size="xs" c="red" mt={6}>
+              {error}
+            </Text>
+          )}
+        </Box>
 
         {/* List */}
         {tags.length === 0 ? (
-          <Center h={120}>
-            <Group gap={8} c="dimmed">
-              <IconTags size={18} />
+          <Center h={140}>
+            <Stack align="center" gap={6} c="dimmed">
+              <IconTags size={26} />
               <Text size="sm">No tags yet — create one above</Text>
-            </Group>
+            </Stack>
           </Center>
         ) : (
-          <Stack gap="xs">
-            {ordered.map(({ tag, depth }) => (
-              <TagRow
-                key={tag.id}
-                tag={tag}
-                depth={depth}
-                parentOptions={parentOptionsFor(tag)}
-                onRename={(t, value) => value.trim() && value !== t.name && run(() => updateTag(t.id, { name: value.trim() }))}
-                onRecolor={(t, c) => run(() => updateTag(t.id, { color: c }))}
-                onReparent={(t, pid) => run(() => updateTag(t.id, { parentId: pid }))}
-                onDelete={(t) => run(() => deleteTag(t.id))}
-              />
-            ))}
-          </Stack>
+          <Box>
+            <Text size="xs" c="dimmed" fw={600} mb={6}>
+              Your tags · {tags.length}
+            </Text>
+            <ScrollArea.Autosize mah="48vh" type="hover">
+              <Stack gap={2}>
+                {ordered.map(({ tag, depth }) => (
+                  <TagRow
+                    key={tag.id}
+                    tag={tag}
+                    depth={depth}
+                    parentOptions={parentOptionsFor(tag)}
+                    onRename={(t, value) => value.trim() && value !== t.name && run(() => updateTag(t.id, { name: value.trim() }))}
+                    onRecolor={(t, c) => run(() => updateTag(t.id, { color: c }))}
+                    onReparent={(t, pid) => run(() => updateTag(t.id, { parentId: pid }))}
+                    onDelete={(t) => run(() => deleteTag(t.id))}
+                  />
+                ))}
+              </Stack>
+            </ScrollArea.Autosize>
+          </Box>
         )}
       </Stack>
     </Modal>
