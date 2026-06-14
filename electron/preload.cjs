@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('native', {
   showInFolder: (relPath) => ipcRenderer.invoke('native:showInFolder', relPath),
   // Resolve a root-relative path to its absolute on-disk path.
   resolvePath: (relPath) => ipcRenderer.invoke('native:resolvePath', relPath),
+  // The OS file-type icon as a PNG data URL (null if unavailable).
+  fileIcon: (relPath) => ipcRenderer.invoke('native:fileIcon', relPath),
 })
