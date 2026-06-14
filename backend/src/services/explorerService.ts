@@ -11,6 +11,19 @@ export interface ExplorerDeps {
   rootDir: string
 }
 
+// Directories the recursive search never descends into — heavy/generated trees
+// that bury real results and slow the walk (dotfolders are skipped separately).
+const SEARCH_SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  'out',
+  'target',
+  'vendor',
+  '__pycache__',
+  '.git',
+])
+
 export interface FileContent {
   name: string
   mimeType: string
@@ -118,7 +131,9 @@ export class ExplorerService {
             weak.push({ entry, score: m.score })
           }
         }
-        if (e.isDir) queue.push(e.abs)
+        // Don't recurse into dotfolders or heavy/generated dirs — they bury
+        // results and slow the walk.
+        if (e.isDir && !e.name.startsWith('.') && !SEARCH_SKIP_DIRS.has(e.name)) queue.push(e.abs)
       }
     }
 
