@@ -199,8 +199,9 @@ export function TagChips({ tags, max = 3 }) {
         <Badge
           key={t.id}
           size="xs"
-          variant="light"
+          variant="filled"
           color={t.color}
+          autoContrast
           title={t.name}
           styles={{
             root: { maxWidth: 110, textTransform: 'none', fontWeight: 500 },
