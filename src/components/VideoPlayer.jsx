@@ -23,10 +23,11 @@ export function VideoPlayer({ src, path }) {
   const videoRef = useRef(null)
   const stageRef = useRef(null)
   const seekRef = useRef(null)
+  const hideTimer = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [hovering, setHovering] = useState(false)
+  const [controlsActive, setControlsActive] = useState(true)
   const [storyboard, setStoryboard] = useState(null)
   const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
   const [scrubX, setScrubX] = useState(null) // cursor ratio (0..1) while dragging; null otherwise
@@ -160,7 +161,24 @@ export function VideoPlayer({ src, path }) {
     else stageRef.current?.requestFullscreen?.()
   }
 
-  const controlsVisible = hovering || !playing
+  // Show controls on activity; auto-hide after a couple seconds of stillness.
+  const pokeControls = useCallback(() => {
+    setControlsActive(true)
+    clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setControlsActive(false), 2500)
+  }, [])
+
+  useEffect(() => {
+    if (playing) pokeControls()
+    else {
+      clearTimeout(hideTimer.current)
+      setControlsActive(true)
+    }
+    return () => clearTimeout(hideTimer.current)
+  }, [playing, pokeControls])
+
+  // Visible when paused, recently active, or mid-scrub.
+  const controlsVisible = !playing || controlsActive || !!seekHover?.dragging
   const iconStyle = { color: '#fff' }
   const pct = duration ? (current / duration) * 100 : 0
   // While dragging, the scrubber tracks the cursor; otherwise the real time.
@@ -177,8 +195,11 @@ export function VideoPlayer({ src, path }) {
   return (
     <Box
       ref={stageRef}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
+      onMouseMove={pokeControls}
+      onMouseLeave={() => {
+        clearTimeout(hideTimer.current)
+        if (playing) setControlsActive(false)
+      }}
       style={{
         position: 'relative',
         width: isFullscreen ? '100vw' : '100%',
@@ -201,7 +222,7 @@ export function VideoPlayer({ src, path }) {
           if (autoplay) e.currentTarget.play().catch(() => {})
         }}
         onEnded={() => setPlaying(false)}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', cursor: 'pointer' }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', cursor: controlsVisible ? 'pointer' : 'none' }}
       />
 
       {/* Center play button while paused */}
