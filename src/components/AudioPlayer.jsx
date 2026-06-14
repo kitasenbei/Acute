@@ -8,7 +8,6 @@ import {
   IconPlayerTrackNextFilled,
   IconVolume,
   IconVolumeOff,
-  IconMusic,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
 import { usePlayerStore } from '../stores/playerStore.js'
@@ -119,23 +118,6 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
   return (
     <Box style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <Stack align="center" gap="lg" w={380} maw="100%">
-        <Box className="audio-art">
-          {/* Note fades in only after the bars have dropped (delay on show). */}
-          <Box
-            className="audio-art-layer"
-            style={{ opacity: playing ? 0 : 1, transitionDelay: playing ? '0ms' : '360ms' }}
-          >
-            <IconMusic size={72} color="var(--mantine-color-dimmed)" />
-          </Box>
-          <Box className="audio-art-layer">
-            <Box className={`audio-eq${playing ? '' : ' paused'}`}>
-              {[0, 1, 2, 3].map((i) => (
-                <span key={i} style={{ animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </Box>
-          </Box>
-        </Box>
-
         <MarqueeTitle text={name} />
 
         <Box w="100%">
