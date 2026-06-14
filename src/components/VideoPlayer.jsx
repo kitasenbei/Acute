@@ -155,6 +155,7 @@ export function VideoPlayer({ src, path }) {
   const displayPct = scrubX != null ? scrubX * 100 : pct
   // Filmstrip reel shown when the bar is pulled up for precise seeking.
   const FILMSTRIP_H = 80
+  const CONTROLS_H = 36
   const showStrip = !!(seekHover?.dragging && seekHover.precise && storyboard)
 
   return (
@@ -219,41 +220,6 @@ export function VideoPlayer({ src, path }) {
           pointerEvents: controlsVisible ? 'auto' : 'none',
         }}
       >
-        {/* Sliding filmstrip window (aspect-preserving) centered on the playhead. */}
-        {showStrip && (() => {
-          const frameW = FILMSTRIP_H * (storyboard.tileW / storyboard.tileH)
-          const centerX = seekHover.w / 2
-          // Slide the strip so the current frame sits under the fixed centre tick.
-          const offset = centerX - (current / storyboard.interval) * frameW
-          return (
-            <Box style={{ position: 'relative', height: FILMSTRIP_H, marginBottom: 10, overflow: 'hidden', background: '#000' }}>
-              <Box style={{ position: 'absolute', left: 0, top: 0, height: '100%', display: 'flex', transform: `translateX(${offset}px)`, willChange: 'transform' }}>
-                {Array.from({ length: storyboard.count }).map((_, i) => {
-                  const col = i % storyboard.cols
-                  const row = Math.floor(i / storyboard.cols)
-                  const bx = storyboard.cols > 1 ? (col / (storyboard.cols - 1)) * 100 : 0
-                  const by = storyboard.rows > 1 ? (row / (storyboard.rows - 1)) * 100 : 0
-                  return (
-                    <Box
-                      key={i}
-                      style={{
-                        width: frameW,
-                        height: '100%',
-                        flexShrink: 0,
-                        backgroundImage: `url(${storyboard.url})`,
-                        backgroundSize: `${storyboard.cols * 100}% ${storyboard.rows * 100}%`,
-                        backgroundPosition: `${bx}% ${by}%`,
-                        borderRight: '1px solid rgba(0,0,0,0.4)',
-                      }}
-                    />
-                  )
-                })}
-              </Box>
-              {/* Fixed centre tick — the strip slides beneath it. */}
-              <Box style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'var(--mantine-primary-color-filled)', transform: 'translateX(-1px)' }} />
-            </Box>
-          )
-        })()}
         <Box
           ref={seekRef}
           mb={6}
@@ -282,7 +248,7 @@ export function VideoPlayer({ src, path }) {
                   bottom: '100%',
                   left,
                   transform: 'translateX(-50%)',
-                  marginBottom: showStrip ? FILMSTRIP_H + 16 : 12,
+                  marginBottom: 12,
                   pointerEvents: 'none',
                   zIndex: 5,
                   display: 'flex',
@@ -321,36 +287,71 @@ export function VideoPlayer({ src, path }) {
           <Box style={{ position: 'absolute', left: 0, height: 4, borderRadius: 2, width: `${displayPct}%`, background: 'var(--mantine-primary-color-filled)' }} />
           <Box style={{ position: 'absolute', left: `${displayPct}%`, top: '50%', width: 12, height: 12, borderRadius: '50%', background: '#fff', transform: 'translate(-50%, -50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)' }} />
         </Box>
-        <Group justify="space-between" gap="xs" wrap="nowrap">
-          <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
-            <ActionIcon variant="transparent" style={iconStyle} onClick={togglePlay}>
-              {playing ? <IconPlayerPauseFilled size={18} /> : <IconPlayerPlayFilled size={18} />}
-            </ActionIcon>
-            {/* Mute + volume share one wheel-/click-friendly zone with padding. */}
-            <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8 }}>
-              <ActionIcon variant="transparent" style={iconStyle} onClick={toggleMute}>
-                {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
+        {/* Slot below the bar: controls normally; on pull-up they slide down and
+            the filmstrip reel rises from behind them into their place. */}
+        <Box style={{ position: 'relative', height: showStrip ? FILMSTRIP_H : CONTROLS_H, transition: 'height 220ms ease' }}>
+          {/* Reel — hidden behind the controls, rises up on pull-up. */}
+          {seekHover && storyboard && (() => {
+            const frameW = FILMSTRIP_H * (storyboard.tileW / storyboard.tileH)
+            const offset = seekHover.w / 2 - (current / storyboard.interval) * frameW
+            return (
+              <Box
+                style={{
+                  position: 'absolute', left: 0, right: 0, top: 0, height: FILMSTRIP_H,
+                  overflow: 'hidden', background: '#000', borderRadius: 2, zIndex: 1, pointerEvents: 'none',
+                  opacity: showStrip ? 1 : 0,
+                  transform: showStrip ? 'translateY(0)' : 'translateY(16px)',
+                  transition: 'opacity 180ms ease, transform 220ms ease',
+                }}
+              >
+                <Box style={{ position: 'absolute', left: 0, top: 0, height: '100%', display: 'flex', transform: `translateX(${offset}px)`, willChange: 'transform' }}>
+                  {Array.from({ length: storyboard.count }).map((_, i) => {
+                    const col = i % storyboard.cols
+                    const row = Math.floor(i / storyboard.cols)
+                    const bx = storyboard.cols > 1 ? (col / (storyboard.cols - 1)) * 100 : 0
+                    const by = storyboard.rows > 1 ? (row / (storyboard.rows - 1)) * 100 : 0
+                    return (
+                      <Box key={i} style={{ width: frameW, height: '100%', flexShrink: 0, backgroundImage: `url(${storyboard.url})`, backgroundSize: `${storyboard.cols * 100}% ${storyboard.rows * 100}%`, backgroundPosition: `${bx}% ${by}%`, borderRight: '1px solid rgba(0,0,0,0.4)' }} />
+                    )
+                  })}
+                </Box>
+                <Box style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'var(--mantine-primary-color-filled)', transform: 'translateX(-1px)' }} />
+              </Box>
+            )
+          })()}
+
+          {/* Controls — slide down and fade out as the reel takes over. */}
+          <Box
+            style={{
+              position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2,
+              opacity: showStrip ? 0 : 1,
+              transform: showStrip ? 'translateY(44px)' : 'translateY(0)',
+              transition: 'opacity 160ms ease, transform 220ms ease',
+              pointerEvents: showStrip ? 'none' : 'auto',
+            }}
+          >
+            <Group justify="space-between" gap="xs" wrap="nowrap">
+              <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
+                <ActionIcon variant="transparent" style={iconStyle} onClick={togglePlay}>
+                  {playing ? <IconPlayerPauseFilled size={18} /> : <IconPlayerPlayFilled size={18} />}
+                </ActionIcon>
+                {/* Mute + volume share one wheel-/click-friendly zone with padding. */}
+                <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8 }}>
+                  <ActionIcon variant="transparent" style={iconStyle} onClick={toggleMute}>
+                    {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
+                  </ActionIcon>
+                  <Slider value={muted ? 0 : volume} min={0} max={1} step={0.05} onChange={changeVolume} size="md" thumbSize={14} w={90} label={null} />
+                </Group>
+                <Text size="xs" c="white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTime(current)} / {formatTime(duration)}
+                </Text>
+              </Group>
+              <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
+                <IconMaximize size={18} />
               </ActionIcon>
-              <Slider
-                value={muted ? 0 : volume}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={changeVolume}
-                size="md"
-                thumbSize={14}
-                w={90}
-                label={null}
-              />
             </Group>
-            <Text size="xs" c="white" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {formatTime(current)} / {formatTime(duration)}
-            </Text>
-          </Group>
-          <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
-            <IconMaximize size={18} />
-          </ActionIcon>
-        </Group>
+          </Box>
+        </Box>
       </Box>
     </Box>
   )
