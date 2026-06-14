@@ -15,6 +15,8 @@ const thumbBox = (size) => ({
   flexShrink: 0,
   background: 'var(--mantine-color-default-hover)',
   position: 'relative',
+  // Smoothly grow/shrink on zoom (size only changes on zoom, never on scroll).
+  transition: 'width 160ms ease, height 160ms ease',
 })
 
 /** A square preview: a real thumbnail for image/video files, otherwise the
@@ -74,7 +76,7 @@ export function Thumb({ entry, size }) {
   if (iconSource === 'os' && osIcon) {
     const g = Math.round(size * 0.86)
     return (
-      <Center style={{ width: size, height: size, flexShrink: 0 }}>
+      <Center style={{ width: size, height: size, flexShrink: 0, transition: 'width 160ms ease, height 160ms ease' }}>
         <img src={osIcon} alt="" width={g} height={g} draggable={false} style={{ objectFit: 'contain' }} />
       </Center>
     )

@@ -51,6 +51,20 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, ta
     : 1
   const rowCount = grid ? Math.ceil(entries.length / cols) : entries.length
 
+  // Briefly animate row repositioning when the layout actually changes (zoom /
+  // column count / view mode) — but never during scroll, so scrolling stays
+  // crisp. The window is short to keep it snappy.
+  const [relayout, setRelayout] = useState(false)
+  const layoutKey = `${cols}:${zoom}:${mode}`
+  const prevLayout = useRef(layoutKey)
+  useEffect(() => {
+    if (prevLayout.current === layoutKey) return
+    prevLayout.current = layoutKey
+    setRelayout(true)
+    const id = setTimeout(() => setRelayout(false), 200)
+    return () => clearTimeout(id)
+  }, [layoutKey])
+
   // A tile's height varies with its thumbnail size, a (clamped) 2-line name, and
   // whether it carries tags. We estimate this per row so layout is correct even
   // before/without dynamic measurement — under-estimating would let the next row
@@ -113,6 +127,8 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, ta
               width: '100%',
               transform: `translateY(${item.start}px)`,
               paddingBottom: grid ? gap : 0,
+              // Glide to new positions only during a relayout, never on scroll.
+              transition: relayout ? 'transform 180ms ease' : undefined,
             }}
           >
             {content}
