@@ -191,6 +191,7 @@ function stopBackend() {
 
 function createWindow() {
   const win = new BrowserWindow({
+    title: 'Acute',
     width: 1000,
     height: 680,
     minWidth: 720,
