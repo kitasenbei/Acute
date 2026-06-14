@@ -67,7 +67,6 @@ function TagRow({ tag, depth, parentOptions, onRename, onRecolor, onReparent, on
       style={{
         marginLeft: depth * 18,
         borderRadius: 8,
-        borderLeft: depth > 0 ? '2px solid var(--mantine-color-default-border)' : undefined,
         background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
