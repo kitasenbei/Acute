@@ -16,6 +16,8 @@ import {
   UnstyledButton,
   FileButton,
   Menu,
+  Popover,
+  Chip,
 } from '@mantine/core'
 import {
   IconHome,
@@ -58,10 +60,12 @@ import {
   IconLayoutList,
   IconLayoutRows,
   IconLayoutGrid,
+  IconFilter,
+  IconX,
 } from '@tabler/icons-react'
 import { api } from './api.js'
 import { formatBytes, formatDate } from './util.js'
-import { EXT, fileKind } from './fileTypes.js'
+import { EXT, fileKind, extOf } from './fileTypes.js'
 import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
@@ -81,6 +85,17 @@ const SORTS = [
   { value: 'name', label: 'Name' },
   { value: 'modified', label: 'Date modified' },
   { value: 'size', label: 'Size' },
+]
+
+// Quick file-kind toggles for the header filter, in display order.
+const KIND_FILTERS = [
+  { value: 'image', label: 'Images', Icon: IconPhoto },
+  { value: 'video', label: 'Videos', Icon: IconMovie },
+  { value: 'audio', label: 'Audio', Icon: IconMusic },
+  { value: 'pdf', label: 'PDFs', Icon: IconFileTypePdf },
+  { value: 'code', label: 'Code', Icon: IconCode },
+  { value: 'text', label: 'Text', Icon: IconFileText },
+  { value: 'other', label: 'Other', Icon: IconFile },
 ]
 
 // Formats offered in the right-click "Convert to" submenu, by file kind.
@@ -150,6 +165,7 @@ function Thumb({ entry, size, iconSize }) {
   const [failed, setFailed] = useState(false)
   const kind = fileKind(entry)
   const hasThumb = kind === 'image' || kind === 'video'
+  const thumbnailFit = useSettingsStore((s) => s.thumbnailFit)
 
   // Backend serves a small cached WebP, so the renderer only decodes a tiny
   // image — no full-resolution decode, no <video> elements in the listing.
@@ -164,7 +180,12 @@ function Thumb({ entry, size, iconSize }) {
           decoding="async"
           draggable={false}
           onError={() => setFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: kind === 'image' ? thumbnailFit : 'cover',
+            display: 'block',
+          }}
         />
         {kind === 'video' && (
           <IconPlayerPlayFilled
@@ -441,6 +462,11 @@ export default function App() {
   const setSort = useViewStore((s) => s.setSort)
   const zoom = useViewStore((s) => s.zoom)
   const zoomBy = useViewStore((s) => s.zoomBy)
+  const filterText = useViewStore((s) => s.filterText)
+  const filterKinds = useViewStore((s) => s.filterKinds)
+  const setFilterText = useViewStore((s) => s.setFilterText)
+  const toggleFilterKind = useViewStore((s) => s.toggleFilterKind)
+  const clearFilter = useViewStore((s) => s.clearFilter)
   const openPreview = usePreviewStore((s) => s.open)
   const openContextMenu = useContextMenuStore((s) => s.open)
   const clipItems = useClipboardStore((s) => s.items)
@@ -476,13 +502,14 @@ export default function App() {
       setPath(p)
       setActiveTagId(null) // navigating a directory clears any tag filter
       setSelected(new Set())
+      clearFilter() // a filter is per-folder; reset it on navigation
       setError(null)
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [clearFilter])
 
   // Show every file/folder carrying a tag, across directories.
   const loadTag = useCallback(async (tagId, { silent } = {}) => {
@@ -571,9 +598,30 @@ export default function App() {
   }, [zoomBy])
 
   const entries = useMemo(() => {
-    const filtered = (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.'))
+    let filtered = (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.'))
+    // Kind chips narrow files only; folders stay visible so you can navigate.
+    if (filterKinds.length) {
+      filtered = filtered.filter((e) => e.type === 'dir' || filterKinds.includes(fileKind(e)))
+    }
+    // Free-text query: comma-separated tokens; a leading dot matches by extension.
+    const tokens = filterText.toLowerCase().split(',').map((t) => t.trim()).filter(Boolean)
+    if (tokens.length) {
+      filtered = filtered.filter((e) => {
+        const name = e.name.toLowerCase()
+        const ext = extOf(e.name)
+        return tokens.some((t) => (t.startsWith('.') ? ext === t.slice(1) : name.includes(t) || ext === t))
+      })
+    }
     return [...filtered].sort((a, b) => compareEntries(a, b, sortBy, sortDir))
-  }, [listing, showHidden, sortBy, sortDir])
+  }, [listing, showHidden, sortBy, sortDir, filterKinds, filterText])
+  // Which file kinds actually appear in this folder — so the filter only
+  // offers chips that would do something.
+  const kindsPresent = useMemo(() => {
+    const set = new Set()
+    for (const e of listing?.entries ?? []) if (e.type !== 'dir') set.add(fileKind(e))
+    return set
+  }, [listing])
+  const filterActive = filterKinds.length > 0 || filterText.trim().length > 0
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
   const activeTag = activeTagId ? tags.find((t) => t.id === activeTagId) : null
 
@@ -979,6 +1027,61 @@ export default function App() {
                 ))}
               </Menu.Dropdown>
             </Menu>
+            <Popover width={260} position="bottom-end" shadow="md" trapFocus>
+              <Popover.Target>
+                <Tooltip label="Filter" openDelay={400}>
+                  <ActionIcon variant={filterActive ? 'light' : 'subtle'} color={filterActive ? 'blue' : 'gray'}>
+                    <IconFilter size={18} />
+                  </ActionIcon>
+                </Tooltip>
+              </Popover.Target>
+              <Popover.Dropdown p="sm">
+                <Group justify="space-between" mb={8}>
+                  <Text size="xs" fw={600} c="dimmed">Filter</Text>
+                  {filterActive && (
+                    <UnstyledButton onClick={clearFilter}>
+                      <Group gap={2}>
+                        <IconX size={12} color="var(--mantine-color-dimmed)" />
+                        <Text size="xs" c="dimmed">Clear</Text>
+                      </Group>
+                    </UnstyledButton>
+                  )}
+                </Group>
+                <TextInput
+                  size="xs"
+                  placeholder="Name or extension (comma-separated)"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.currentTarget.value)}
+                  leftSection={<IconFilter size={13} />}
+                  rightSection={
+                    filterText ? (
+                      <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => setFilterText('')}>
+                        <IconX size={13} />
+                      </ActionIcon>
+                    ) : null
+                  }
+                  mb="sm"
+                />
+                <Chip.Group multiple value={filterKinds} onChange={() => {}}>
+                  <Group gap={6}>
+                    {KIND_FILTERS.filter((k) => kindsPresent.has(k.value)).map(({ value, label, Icon }) => (
+                      <Chip
+                        key={value}
+                        size="xs"
+                        checked={filterKinds.includes(value)}
+                        onChange={() => toggleFilterKind(value)}
+                        icon={<Icon size={12} />}
+                      >
+                        {label}
+                      </Chip>
+                    ))}
+                  </Group>
+                </Chip.Group>
+                {kindsPresent.size === 0 && (
+                  <Text size="xs" c="dimmed">No files to filter here.</Text>
+                )}
+              </Popover.Dropdown>
+            </Popover>
             <SegmentedControl
               size="xs"
               value={mode}

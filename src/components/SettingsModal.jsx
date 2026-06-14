@@ -96,6 +96,22 @@ function AutoplayVideoControl() {
   return <Switch checked={autoplayVideo} onChange={(e) => setAutoplayVideo(e.currentTarget.checked)} />
 }
 
+function ThumbnailFitControl() {
+  const thumbnailFit = useSettingsStore((s) => s.thumbnailFit)
+  const setThumbnailFit = useSettingsStore((s) => s.setThumbnailFit)
+  return (
+    <SegmentedControl
+      value={thumbnailFit}
+      onChange={setThumbnailFit}
+      size="sm"
+      data={[
+        { value: 'cover', label: 'Fill' },
+        { value: 'contain', label: 'Fit' },
+      ]}
+    />
+  )
+}
+
 function GeneralPanel() {
   return (
     <Stack gap={0}>
@@ -108,6 +124,9 @@ function GeneralPanel() {
         </Row>
         <Row label="Autoplay video">
           <AutoplayVideoControl />
+        </Row>
+        <Row label="Image thumbnails">
+          <ThumbnailFitControl />
         </Row>
       </Box>
     </Stack>

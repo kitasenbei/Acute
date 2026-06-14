@@ -19,6 +19,10 @@ export const useSettingsStore = create(
       autoplayVideo: false,
       setAutoplayVideo: (autoplayVideo) => set({ autoplayVideo }),
 
+      // Image thumbnail fit: 'cover' (crop to square) or 'contain' (fit whole).
+      thumbnailFit: 'cover',
+      setThumbnailFit: (thumbnailFit) => set({ thumbnailFit }),
+
       // Settings modal UI state
       isOpen: false,
       section: 'general',
@@ -28,7 +32,11 @@ export const useSettingsStore = create(
     }),
     {
       name: 'app-settings',
-      partialize: (state) => ({ appearance: state.appearance, autoplayVideo: state.autoplayVideo }),
+      partialize: (state) => ({
+        appearance: state.appearance,
+        autoplayVideo: state.autoplayVideo,
+        thumbnailFit: state.thumbnailFit,
+      }),
     },
   ),
 )

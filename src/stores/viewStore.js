@@ -19,6 +19,19 @@ export const useViewStore = create(
       showHidden: false,
       toggleHidden: () => set((s) => ({ showHidden: !s.showHidden })),
 
+      // Transient listing filter (not persisted): a free-text name/extension
+      // query plus a set of selected file kinds. Empty = show everything.
+      filterText: '',
+      filterKinds: [],
+      setFilterText: (filterText) => set({ filterText }),
+      toggleFilterKind: (kind) =>
+        set((s) => ({
+          filterKinds: s.filterKinds.includes(kind)
+            ? s.filterKinds.filter((k) => k !== kind)
+            : [...s.filterKinds, kind],
+        })),
+      clearFilter: () => set({ filterText: '', filterKinds: [] }),
+
       // Thumbnail/icon zoom factor (Ctrl+wheel). Clamped to a sane range.
       zoom: 1,
       zoomBy: (delta) =>
@@ -34,6 +47,16 @@ export const useViewStore = create(
             : { sortBy: field, sortDir: field === 'name' ? 'asc' : 'desc' },
         ),
     }),
-    { name: 'app-view' },
+    {
+      name: 'app-view',
+      // Persist only durable preferences — the filter is per-session.
+      partialize: (s) => ({
+        mode: s.mode,
+        showHidden: s.showHidden,
+        zoom: s.zoom,
+        sortBy: s.sortBy,
+        sortDir: s.sortDir,
+      }),
+    },
   ),
 )
