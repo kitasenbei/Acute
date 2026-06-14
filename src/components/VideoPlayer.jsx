@@ -158,7 +158,7 @@ export function VideoPlayer({ src }) {
               {playing ? <IconPlayerPauseFilled size={18} /> : <IconPlayerPlayFilled size={18} />}
             </ActionIcon>
             {/* Mute + volume share one wheel-/click-friendly zone with padding. */}
-            <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8, cursor: 'ns-resize' }}>
+            <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8 }}>
               <ActionIcon variant="transparent" style={iconStyle} onClick={toggleMute}>
                 {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
               </ActionIcon>

@@ -123,7 +123,7 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
           )}
         </Group>
 
-        <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8, cursor: 'ns-resize' }}>
+        <Group gap={6} wrap="nowrap" onWheel={nudgeVolume} style={{ paddingBlock: 8 }}>
           <ActionIcon variant="subtle" color="gray" onClick={toggleMute}>
             {muted || volume === 0 ? <IconVolumeOff size={18} /> : <IconVolume size={18} />}
           </ActionIcon>
