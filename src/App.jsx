@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react'
 import {
   Box,
   Center,
-  Divider,
   Flex,
   Group,
   Loader,
@@ -448,6 +447,15 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, se
   )
 })
 
+/** A plain group heading for the sidebar (replaces dividers). */
+function SidebarLabel({ children, first }) {
+  return (
+    <Text size="xs" c="dimmed" px="sm" mt={first ? 4 : 12} mb={4}>
+      {children}
+    </Text>
+  )
+}
+
 function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin }) {
   const [hover, setHover] = useState(false)
   return (
@@ -810,6 +818,12 @@ export default function App() {
         items.push({ label: 'Open with default app', icon: IconExternalLink, onClick: () => window.native.openPath(entry.path) })
         items.push({ label: 'Reveal in file manager', icon: IconFolderOpen, onClick: () => window.native.showInFolder(entry.path) })
       }
+      // In a tag view the entries span folders, so offer a jump to the file's
+      // actual location (navigating clears the tag filter).
+      if (activeTagId) {
+        const parentDir = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : ''
+        items.push({ label: 'Go to location', icon: IconFolder, onClick: () => load(parentDir) })
+      }
       items.push({ divider: true })
     }
 
@@ -889,7 +903,7 @@ export default function App() {
       onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath, activeTagId])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -1031,6 +1045,7 @@ export default function App() {
       <Flex direction="column" w={210} p={8}
         style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}>
         <Box style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <SidebarLabel first>Places</SidebarLabel>
           <SidebarItem icon={IconHome} label="Home" active={path === ''} onClick={() => load('')} />
           {places.map((p) => (
             <SidebarItem
@@ -1041,7 +1056,7 @@ export default function App() {
               onClick={() => load(p.name)}
             />
           ))}
-          {favorites.length > 0 && <Divider my={6} />}
+          {favorites.length > 0 && <SidebarLabel>Favorites</SidebarLabel>}
           {favorites.map((fav) => (
             <SidebarItem
               key={fav.path}
@@ -1052,7 +1067,7 @@ export default function App() {
               onUnpin={() => unpin(fav.path)}
             />
           ))}
-          {tags.length > 0 && <Divider my={6} />}
+          {tags.length > 0 && <SidebarLabel>Tags</SidebarLabel>}
           <SidebarTagTree tags={tags} activeTagId={activeTagId} onSelect={loadTag} />
         </Box>
         <NowPlaying />
