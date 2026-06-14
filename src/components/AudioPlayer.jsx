@@ -117,7 +117,17 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
   }
 
   return (
-    <Box style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <Box
+      style={{
+        minHeight: '60vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        // Very dim glow, just a hair off the player's background colour.
+        background: 'radial-gradient(110% 75% at 50% 28%, var(--mantine-color-default-hover), var(--mantine-color-body))',
+      }}
+    >
       <Stack align="center" gap="lg" w={380} maw="100%">
         <Box className="audio-art">
           {playing ? (
