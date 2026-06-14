@@ -88,6 +88,25 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
     expect(res.status).toBe(400)
   })
 
+  it('converts an image to another format', async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } })
+      .png()
+      .toBuffer()
+    await fs.writeFile(path.join(stack.rootDir, 'pic.png'), png)
+
+    const res = await request(app).post('/api/fs/convert').send({ path: 'pic.png', format: 'jpg' })
+    expect(res.status).toBe(201)
+    expect(res.body.name).toBe('pic.jpg')
+
+    const out = await sharp(path.join(stack.rootDir, 'pic.jpg')).metadata()
+    expect(out.format).toBe('jpeg')
+  })
+
+  it('rejects converting a non-image', async () => {
+    const res = await request(app).post('/api/fs/convert').send({ path: 'notes.txt', format: 'png' })
+    expect(res.status).toBe(400)
+  })
+
   it('rejects traversal with 400', async () => {
     const res = await request(app).get('/api/fs').query({ path: '../../etc' })
     expect(res.status).toBe(400)

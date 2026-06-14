@@ -3,6 +3,7 @@ import { ValidationError } from '../errors.js'
 import type { ExplorerService } from '../services/explorerService.js'
 import type { ThumbnailService } from '../services/thumbnailService.js'
 import type { StoryboardService } from '../services/storyboardService.js'
+import type { ImageService } from '../services/imageService.js'
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>
 
@@ -39,6 +40,7 @@ export class ExplorerController {
     private readonly service: ExplorerService,
     private readonly thumbnails: ThumbnailService,
     private readonly storyboards: StoryboardService,
+    private readonly images: ImageService,
   ) {}
 
   list = wrap(async (req, res) => {
@@ -81,6 +83,10 @@ export class ExplorerController {
 
   move = wrap(async (req, res) => {
     res.json(await this.service.move(pathList(req.body?.paths), pathParam(req.body?.destDir)))
+  })
+
+  convert = wrap(async (req, res) => {
+    res.status(201).json(await this.images.convert(pathParam(req.body?.path), req.body?.format))
   })
 
   rename = wrap(async (req, res) => {

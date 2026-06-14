@@ -69,6 +69,14 @@ export const api = {
     }).then(json)
   },
 
+  convert(path, format) {
+    return fetch(`${BASE}/api/fs/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, format }),
+    }).then(json)
+  },
+
   upload(path, file) {
     const form = new FormData()
     form.append('path', path ?? '')

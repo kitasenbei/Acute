@@ -81,6 +81,14 @@ const SORTS = [
   { value: 'size', label: 'Size' },
 ]
 
+// Image formats offered in the right-click "Convert to" actions.
+const IMAGE_FORMATS = [
+  { fmt: 'png', label: 'PNG' },
+  { fmt: 'jpg', label: 'JPG' },
+  { fmt: 'webp', label: 'WebP' },
+  { fmt: 'avif', label: 'AVIF' },
+]
+
 // Sort entries with folders always first, then by the chosen field/direction.
 function compareEntries(a, b, field, dir) {
   if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
@@ -647,6 +655,16 @@ export default function App() {
         items.push({ label: 'Download', icon: IconDownload, onClick: () => api.download(entry).catch((err) => setError(err.message)) })
       }
       items.push({ label: 'Rename', icon: IconPencil, onClick: () => setEditingPath(entry.path) })
+
+      // Convert image to another format (writes a new file alongside).
+      if (fileKind(entry) === 'image') {
+        const cur = entry.name.split('.').pop()?.toLowerCase()
+        items.push({ divider: true })
+        for (const { fmt, label } of IMAGE_FORMATS) {
+          if (fmt === cur || (fmt === 'jpg' && cur === 'jpeg')) continue
+          items.push({ label: `Convert to ${label}`, icon: IconPhoto, onClick: () => run(() => api.convert(entry.path, fmt)) })
+        }
+      }
 
       // Tags: toggle each tag for this entry, plus a shortcut to the manager.
       items.push({ divider: true })
