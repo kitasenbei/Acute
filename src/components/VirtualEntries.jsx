@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Box } from '@mantine/core'
 
@@ -12,7 +12,10 @@ import { Box } from '@mantine/core'
  */
 export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, tagsByPath }) {
   const grid = mode === 'grid'
-  const [width, setWidth] = useState(0)
+  // Seed from the live element so the very first paint already has the real
+  // width — otherwise the grid briefly computes 1 column (a single-column flash,
+  // re-triggered on every remount via the view key).
+  const [width, setWidth] = useState(() => scrollRef.current?.clientWidth ?? 0)
 
   // A tile's height depends on how many tags it carries, which can arrive/change
   // after the row first mounts. tanstack caches measurements by data-index and
@@ -22,8 +25,9 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, ta
   const tagSig = (rowEntries) =>
     tagsByPath ? rowEntries.map((e) => tagsByPath.get(e.path)?.length ?? 0).join(',') : ''
 
-  // Track the viewport width so the grid can compute its column count.
-  useEffect(() => {
+  // Track the viewport width so the grid can compute its column count. Measured
+  // in a layout effect (before paint) to avoid a single-column first frame.
+  useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
     setWidth(el.clientWidth)

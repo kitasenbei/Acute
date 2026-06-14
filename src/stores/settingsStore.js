@@ -23,6 +23,11 @@ export const useSettingsStore = create(
       thumbnailFit: 'cover',
       setThumbnailFit: (thumbnailFit) => set({ thumbnailFit }),
 
+      // File-type icons: 'acute' (our glyphs) or 'os' (native OS icons via
+      // Electron). Media thumbnails are unaffected either way.
+      iconSource: 'acute',
+      setIconSource: (iconSource) => set({ iconSource }),
+
       // Settings modal UI state
       isOpen: false,
       section: 'general',
@@ -36,6 +41,7 @@ export const useSettingsStore = create(
         appearance: state.appearance,
         autoplayVideo: state.autoplayVideo,
         thumbnailFit: state.thumbnailFit,
+        iconSource: state.iconSource,
       }),
     },
   ),

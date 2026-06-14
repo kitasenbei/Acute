@@ -33,6 +33,11 @@ export const api = {
     return fetch(`${BASE}/api/fs/usage`).then(json)
   },
 
+  // Recursively search for entries by name under `path`. Returns { entries }.
+  search(path = '', query = '') {
+    return fetch(`${BASE}/api/fs/search${q(path)}&q=${encodeURIComponent(query)}`).then(json)
+  },
+
   createFolder(path, name) {
     return fetch(`${BASE}/api/fs/folder`, {
       method: 'POST',

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   Box,
   Center,
@@ -44,23 +44,11 @@ import {
   IconStar,
   IconStarFilled,
   IconFolder,
-  IconFolderFilled,
-  IconFileFilled,
-  IconPhotoFilled,
-  IconFileMusicFilled,
   IconSettings,
   IconTags,
-  IconDeviceDesktop,
-  IconFiles,
   IconFile,
   IconPhoto,
-  IconFileTypePdf,
-  IconFileText,
-  IconFileZip,
   IconMusic,
-  IconMovie,
-  IconCode,
-  IconPlayerPlayFilled,
   IconLayoutList,
   IconLayoutRows,
   IconLayoutGrid,
@@ -68,9 +56,9 @@ import {
   IconX,
   IconPlaylist,
   IconPlaylistAdd,
+  IconSearch,
 } from '@tabler/icons-react'
 import { api } from './api.js'
-import { formatBytes, formatDate } from './util.js'
 import { EXT, fileKind, extOf } from './fileTypes.js'
 import { useSettingsStore } from './stores/settingsStore.js'
 import { useViewStore } from './stores/viewStore.js'
@@ -80,415 +68,22 @@ import { useClipboardStore } from './stores/clipboardStore.js'
 import { useJobsStore } from './stores/jobsStore.js'
 import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
-import { TagChips } from './components/TagManagerModal.jsx'
 import { SidebarTagTree } from './components/SidebarTagTree.jsx'
 import { NowPlaying } from './components/Playlist.jsx'
 import { useQueueStore } from './stores/queueStore.js'
 import { StatusBar } from './components/StatusBar.jsx'
-
-// Shared empty array keeps untagged rows' `tags` prop referentially stable.
-const EMPTY_TAGS = []
-
-const SORTS = [
-  { value: 'name', label: 'Name' },
-  { value: 'modified', label: 'Date modified' },
-  { value: 'size', label: 'Size' },
-]
-
-// Quick file-kind toggles for the header filter, in display order.
-const KIND_FILTERS = [
-  { value: 'image', label: 'Images', Icon: IconPhoto },
-  { value: 'video', label: 'Videos', Icon: IconMovie },
-  { value: 'audio', label: 'Audio', Icon: IconMusic },
-  { value: 'pdf', label: 'PDFs', Icon: IconFileTypePdf },
-  { value: 'code', label: 'Code', Icon: IconCode },
-  { value: 'text', label: 'Text', Icon: IconFileText },
-  { value: 'other', label: 'Other', Icon: IconFile },
-]
-
-// Formats offered in the right-click "Convert to" submenu, by file kind.
-const CONVERT_FORMATS = {
-  image: [
-    { fmt: 'png', label: 'PNG' },
-    { fmt: 'jpg', label: 'JPG' },
-    { fmt: 'webp', label: 'WebP' },
-    { fmt: 'avif', label: 'AVIF' },
-  ],
-  video: [
-    { fmt: 'mp4', label: 'MP4' },
-    { fmt: 'webm', label: 'WebM' },
-    { fmt: 'mkv', label: 'MKV' },
-    { fmt: 'mov', label: 'MOV' },
-  ],
-}
-
-// Audio formats a video's soundtrack can be extracted to.
-const AUDIO_EXTRACT = [
-  { fmt: 'mp3', label: 'MP3' },
-  { fmt: 'm4a', label: 'M4A' },
-  { fmt: 'wav', label: 'WAV' },
-  { fmt: 'flac', label: 'FLAC' },
-]
-
-// Sort entries with folders always first, then by the chosen field/direction.
-function compareEntries(a, b, field, dir) {
-  if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-  let r = 0
-  if (field === 'modified') r = new Date(a.modifiedAt) - new Date(b.modifiedAt)
-  else if (field === 'size') r = a.size - b.size
-  if (r === 0) r = a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true })
-  return dir === 'desc' ? -r : r
-}
-
-// Standard home subfolders a file explorer surfaces for quick access. Only the
-// ones that actually exist under the root are shown.
-const PLACES = [
-  { name: 'Desktop', icon: IconDeviceDesktop },
-  { name: 'Documents', icon: IconFiles },
-  { name: 'Downloads', icon: IconDownload },
-  { name: 'Pictures', icon: IconPhoto },
-  { name: 'Music', icon: IconMusic },
-  { name: 'Videos', icon: IconMovie },
-]
-
-// Tabler has no filled PDF glyph, so compose one: a solid red document with a
-// small white "PDF" wordmark. Matches the (size, color) API of Tabler icons so
-// it slots into iconForEntry like any other.
-function PdfIcon({ size = 24, color = '#e03131' }) {
-  return (
-    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }}>
-      <IconFileFilled size={size} color={color} />
-      <span
-        style={{
-          position: 'absolute',
-          bottom: size * 0.17,
-          left: 0,
-          right: 0,
-          textAlign: 'center',
-          fontSize: size * 0.24,
-          fontWeight: 800,
-          letterSpacing: size * 0.004,
-          lineHeight: 1,
-          color: '#fff',
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
-      >
-        PDF
-      </span>
-    </span>
-  )
-}
-
-// Solid glyph + a single tone per kind, rendered directly (no colored tile).
-// Folders get a soft, intentionally theme-independent gold; file kinds borrow
-// their hue from Mantine's palette so they track light/dark.
-function iconForEntry(entry) {
-  if (entry.type === 'dir') return { Icon: IconFolderFilled, tone: '#e0aa3e' }
-  const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
-  const v = (c) => `var(--mantine-color-${c}-6)`
-  if (EXT.image.includes(ext)) return { Icon: IconPhotoFilled, tone: v('grape') }
-  if (EXT.pdf.includes(ext)) return { Icon: PdfIcon, tone: v('red') }
-  if (EXT.audio.includes(ext)) return { Icon: IconFileMusicFilled, tone: v('teal') }
-  if (EXT.video.includes(ext)) return { Icon: IconMovie, tone: v('indigo') }
-  if (EXT.archive.includes(ext)) return { Icon: IconFileZip, tone: v('orange') }
-  if (EXT.code.includes(ext)) return { Icon: IconCode, tone: v('blue') }
-  if (EXT.text.includes(ext)) return { Icon: IconFileText, tone: v('gray') }
-  return { Icon: IconFileFilled, tone: v('gray') }
-}
-
-const thumbBox = (size) => ({
-  width: size,
-  height: size,
-  borderRadius: 8,
-  overflow: 'hidden',
-  flexShrink: 0,
-  background: 'var(--mantine-color-default-hover)',
-  position: 'relative',
-})
-
-/** A square preview: a real thumbnail for image/video files, otherwise the
- * type icon. Falls back to the icon if the media fails to load. */
-function Thumb({ entry, size }) {
-  const { Icon, tone } = iconForEntry(entry)
-  const [failed, setFailed] = useState(false)
-  const kind = fileKind(entry)
-  const hasThumb = kind === 'image' || kind === 'video'
-  const thumbnailFit = useSettingsStore((s) => s.thumbnailFit)
-
-  // Backend serves a small cached WebP, so the renderer only decodes a tiny
-  // image — no full-resolution decode, no <video> elements in the listing.
-  if (!failed && hasThumb) {
-    const px = Math.min(512, Math.round(size * 2)) // a touch sharper than 1x
-    return (
-      <Box style={thumbBox(size)}>
-        <img
-          src={api.thumbnailUrl(entry.path, px)}
-          alt={entry.name}
-          loading="lazy"
-          decoding="async"
-          draggable={false}
-          onError={() => setFailed(true)}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: kind === 'image' ? thumbnailFit : 'cover',
-            display: 'block',
-          }}
-        />
-        {kind === 'video' && (
-          <IconPlayerPlayFilled
-            size={size >= 40 ? 18 : 10}
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: '#fff',
-              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))',
-            }}
-          />
-        )}
-      </Box>
-    )
-  }
-
-  return (
-    <Center style={{ width: size, height: size, flexShrink: 0 }}>
-      <Icon size={Math.round(size * 0.68)} color={tone} />
-    </Center>
-  )
-}
-
-function Breadcrumbs({ path, onNavigate }) {
-  const segments = path ? path.split('/') : []
-  return (
-    <Group gap={4} wrap="nowrap" style={{ overflow: 'hidden' }}>
-      <ActionIcon variant="subtle" color="gray" onClick={() => onNavigate('')}>
-        <IconHome size={16} />
-      </ActionIcon>
-      {segments.map((seg, i) => {
-        const target = segments.slice(0, i + 1).join('/')
-        const last = i === segments.length - 1
-        return (
-          <Group gap={4} key={target} wrap="nowrap">
-            <IconChevronRight size={14} color="var(--mantine-color-dimmed)" />
-            <UnstyledButton onClick={() => !last && onNavigate(target)}>
-              <Text size="sm" c={last ? undefined : 'dimmed'} fw={last ? 600 : 400} truncate>
-                {seg}
-              </Text>
-            </UnstyledButton>
-          </Group>
-        )
-      })}
-    </Group>
-  )
-}
-
-/** Inline name editor reused by every view mode. */
-function NameField({ entry, onCommit, onCancel }) {
-  return (
-    <TextInput
-      size="xs"
-      defaultValue={entry.name}
-      autoFocus
-      onFocus={(e) => e.currentTarget.select()}
-      onClick={(e) => e.stopPropagation()}
-      onBlur={(e) => onCommit(entry, e.currentTarget.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onCommit(entry, e.currentTarget.value)
-        if (e.key === 'Escape') onCancel()
-      }}
-    />
-  )
-}
-
-const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onTogglePin, onContextMenu }) {
-  const [hover, setHover] = useState(false)
-  const isDir = entry.type === 'dir'
-  const base = compact ? 24 : 32
-  const thumbSize = Math.round(base * zoom)
-
-  return (
-    <Flex
-      data-path={entry.path}
-      align="center"
-      gap="sm"
-      px="md"
-      py={compact ? 3 : 7}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onDoubleClick={() => (isDir ? onOpen(entry) : onOpenFile(entry))}
-      onContextMenu={(e) => onContextMenu(entry, e)}
-      style={{
-        borderRadius: 8,
-        cursor: 'default',
-        background: selected
-          ? 'var(--mantine-primary-color-light)'
-          : hover
-            ? 'var(--mantine-color-default-hover)'
-            : 'transparent',
-      }}
-    >
-      <Thumb entry={entry} size={thumbSize} />
-
-      <Box style={{ flex: 1, minWidth: 0 }}>
-        {editing ? (
-          <NameField entry={entry} onCommit={onCommitEdit} onCancel={onCancelEdit} />
-        ) : (
-          <Text size="sm" truncate>
-            {entry.name}
-          </Text>
-        )}
-      </Box>
-
-      <TagChips tags={tags} />
-
-      <Text size="xs" c="dimmed" w={70} ta="right">
-        {isDir ? '' : formatBytes(entry.size)}
-      </Text>
-      {!compact && (
-        <Text size="xs" c="dimmed" w={100} ta="right" visibleFrom="sm">
-          {formatDate(entry.modifiedAt)}
-        </Text>
-      )}
-
-      {/* Actions mount only on hover — keeps non-hovered (and scrolling) rows light. */}
-      <Group gap={2} w={118} justify="flex-end">
-        {hover &&
-          (isDir ? (
-            <Tooltip label={pinned ? 'Unpin' : 'Pin'} openDelay={400}>
-              <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} onClick={() => onTogglePin(entry)}>
-                {pinned ? <IconStarFilled size={15} /> : <IconStar size={15} />}
-              </ActionIcon>
-            </Tooltip>
-          ) : (
-            <Tooltip label="Open" openDelay={400}>
-              <ActionIcon variant="subtle" color="gray" onClick={() => onOpenFile(entry)}>
-                <IconEye size={16} />
-              </ActionIcon>
-            </Tooltip>
-          ))}
-        {hover && (
-          <Tooltip label="Rename" openDelay={400}>
-            <ActionIcon variant="subtle" color="gray" onClick={() => onStartEdit(entry.path)}>
-              <IconPencil size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
-      </Group>
-    </Flex>
-  )
-})
-
-const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onTogglePin, onContextMenu }) {
-  const [hover, setHover] = useState(false)
-  const isDir = entry.type === 'dir'
-  const thumbSize = Math.round(64 * zoom)
-
-  return (
-    <Flex
-      data-path={entry.path}
-      direction="column"
-      align="center"
-      gap={8}
-      p="sm"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onDoubleClick={() => (isDir ? onOpen(entry) : onOpenFile(entry))}
-      onContextMenu={(e) => onContextMenu(entry, e)}
-      style={{
-        position: 'relative',
-        borderRadius: 10,
-        cursor: 'default',
-        background: selected
-          ? 'var(--mantine-primary-color-light)'
-          : hover
-            ? 'var(--mantine-color-default-hover)'
-            : 'transparent',
-      }}
-    >
-      {hover && (
-        <Group gap={2} style={{ position: 'absolute', top: 4, right: 4 }}>
-          {isDir ? (
-            <ActionIcon variant="subtle" color={pinned ? 'yellow' : 'gray'} size="sm" onClick={() => onTogglePin(entry)}>
-              {pinned ? <IconStarFilled size={14} /> : <IconStar size={14} />}
-            </ActionIcon>
-          ) : (
-            <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onOpenFile(entry)}>
-              <IconEye size={14} />
-            </ActionIcon>
-          )}
-          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onStartEdit(entry.path)}>
-            <IconPencil size={14} />
-          </ActionIcon>
-        </Group>
-      )}
-
-      <Thumb entry={entry} size={thumbSize} />
-
-      <Box w="100%" style={{ textAlign: 'center' }}>
-        {editing ? (
-          <NameField entry={entry} onCommit={onCommitEdit} onCancel={onCancelEdit} />
-        ) : (
-          <Text size="xs" ta="center" lineClamp={2} title={entry.name}>
-            {entry.name}
-          </Text>
-        )}
-      </Box>
-      {tags?.length > 0 && (
-        <Group justify="center" style={{ maxWidth: '100%' }}>
-          <TagChips tags={tags} max={2} />
-        </Group>
-      )}
-    </Flex>
-  )
-})
-
-/** A plain group heading for the sidebar (replaces dividers). */
-function SidebarLabel({ children, first }) {
-  return (
-    <Text size="xs" c="dimmed" px="sm" mt={first ? 4 : 12} mb={4}>
-      {children}
-    </Text>
-  )
-}
-
-function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin }) {
-  const [hover, setHover] = useState(false)
-  return (
-    <Flex
-      align="center"
-      gap="xs"
-      px="sm"
-      py={6}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        borderRadius: 8,
-        cursor: 'pointer',
-        background: active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
-      }}
-    >
-      {dot ? (
-        <ColorSwatch color={dot} size={11} style={{ marginLeft: 3, marginRight: 3 }} />
-      ) : (
-        <Icon size={17} color="var(--mantine-color-dimmed)" />
-      )}
-      <Text size="sm" truncate style={{ flex: 1 }}>
-        {label}
-      </Text>
-      {onUnpin && hover && (
-        <ActionIcon variant="subtle" color="gray" size="sm" onClick={(e) => { e.stopPropagation(); onUnpin() }}>
-          <IconStarFilled size={13} />
-        </ActionIcon>
-      )}
-    </Flex>
-  )
-}
+import { EntryRow, EntryTile } from './components/EntryItems.jsx'
+import { Breadcrumbs } from './components/Breadcrumbs.jsx'
+import { SidebarItem, SidebarLabel } from './components/SidebarItem.jsx'
+import {
+  EMPTY_TAGS,
+  SORTS,
+  KIND_FILTERS,
+  CONVERT_FORMATS,
+  AUDIO_EXTRACT,
+  PLACES,
+  compareEntries,
+} from './explorerConfig.js'
 
 export default function App() {
   const [path, setPath] = useState('')
@@ -504,11 +99,15 @@ export default function App() {
   const [usage, setUsage] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
   const [marquee, setMarquee] = useState(null) // viewport rect while drag-selecting
+  const [search, setSearch] = useState('') // recursive search query (empty = off)
+  const [searchResults, setSearchResults] = useState(null) // null until first result set
   const dragRef = useRef(null)
   const resetRef = useRef(null)
   const contentRef = useRef(null)
   const scrollRef = useRef(null)
   const jobStatusRef = useRef({})
+  const anchorRef = useRef(null) // last clicked path, for shift-range selection
+  const entriesRef = useRef([]) // current visible entries, for index-based selection
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
@@ -563,6 +162,8 @@ export default function App() {
       setActiveTagId(null) // navigating a directory clears any tag filter
       setSelected(new Set())
       clearFilter() // a filter is per-folder; reset it on navigation
+      setSearch('') // and a recursive search is per-folder too
+      setSearchResults(null)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -657,8 +258,53 @@ export default function App() {
     return () => el.removeEventListener('wheel', onWheel)
   }, [zoomBy])
 
+  // Ctrl/⌘+A selects every entry, Escape clears the selection. Skipped while a
+  // text field is focused so it doesn't hijack normal editing shortcuts.
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        setSelected(new Set(entriesRef.current.map((x) => x.path)))
+      } else if (e.key === 'Escape') {
+        setSelected(new Set())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Recursive search: debounce the query, then fetch matches under the current
+  // directory. An empty query turns search off (falls back to the listing).
+  useEffect(() => {
+    const q = search.trim()
+    if (!q) {
+      setSearchResults(null)
+      return
+    }
+    let cancelled = false
+    const id = setTimeout(async () => {
+      try {
+        const { entries } = await api.search(path, q)
+        if (!cancelled) setSearchResults(entries)
+      } catch (e) {
+        if (!cancelled) {
+          setError(e.message)
+          setSearchResults([])
+        }
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [search, path])
+
+  const searching = search.trim().length > 0
   const entries = useMemo(() => {
-    let filtered = (listing?.entries ?? []).filter((e) => showHidden || !e.name.startsWith('.'))
+    const source = searching ? (searchResults ?? []) : (listing?.entries ?? [])
+    let filtered = source.filter((e) => showHidden || !e.name.startsWith('.'))
     // Kind chips narrow files only; folders stay visible so you can navigate.
     if (filterKinds.length) {
       filtered = filtered.filter((e) => e.type === 'dir' || filterKinds.includes(fileKind(e)))
@@ -672,8 +318,11 @@ export default function App() {
         return tokens.some((t) => (t.startsWith('.') ? ext === t.slice(1) : name.includes(t) || ext === t))
       })
     }
-    return [...filtered].sort((a, b) => compareEntries(a, b, sortBy, sortDir))
-  }, [listing, showHidden, sortBy, sortDir, filterKinds, filterText])
+    // Search results arrive ranked by relevance — keep that order; only the
+    // normal listing is re-sorted by the chosen field.
+    return searching ? filtered : [...filtered].sort((a, b) => compareEntries(a, b, sortBy, sortDir))
+  }, [listing, searching, searchResults, showHidden, sortBy, sortDir, filterKinds, filterText])
+  entriesRef.current = entries
   // Which file kinds actually appear in this folder — so the filter only
   // offers chips that would do something.
   const kindsPresent = useMemo(() => {
@@ -886,6 +535,19 @@ export default function App() {
         items.push({ label: 'Extract audio', icon: IconMusic, submenu: audioSub })
       }
 
+      // Narrow the current listing to entries sharing this file's extension.
+      if (!isDir) {
+        const ext = extOf(entry.name)
+        if (ext) {
+          items.push({ divider: true })
+          items.push({
+            label: `Filter by .${ext} files`,
+            icon: IconFilter,
+            onClick: () => setFilterText(`.${ext}`),
+          })
+        }
+      }
+
       // Tags: toggle each tag for this entry, plus a shortcut to the manager.
       items.push({ divider: true })
       const assigned = new Set(assignments[entry.path] || [])
@@ -903,7 +565,7 @@ export default function App() {
       onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath, activeTagId])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath, activeTagId, setFilterText])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -925,40 +587,92 @@ export default function App() {
   )
 
   // --- Rubber-band (marquee) selection -------------------------------------
-  const onSelectMove = useCallback((e) => {
+  // Because the list is virtualized, only the visible page is in the DOM. So we
+  // hit-test the mounted rows each frame, but *persist* hits for rows that were
+  // inside the box when they scrolled out — and auto-scroll while the cursor is
+  // near an edge so a drag can sweep beyond the viewport.
+  const applyMarquee = useCallback(() => {
     const d = dragRef.current
-    if (!d) return
-    const dx = e.clientX - d.startX
-    const dy = e.clientY - d.startY
-    if (!d.moved && Math.hypot(dx, dy) < 5) return
-    d.moved = true
+    const el = scrollRef.current
+    if (!d || !el) return
+    const box = el.getBoundingClientRect()
+    const scrollTop = el.scrollTop
 
-    const left = Math.min(e.clientX, d.startX)
-    const top = Math.min(e.clientY, d.startY)
-    const width = Math.abs(dx)
-    const height = Math.abs(dy)
-    setMarquee({ left, top, width, height })
+    // The selection box is anchored in *content* coordinates (drag-start point +
+    // scroll), so auto-scrolling reveals more of the same box instead of moving
+    // it — dragging back up correctly shrinks the box rather than dropping rows.
+    const curX = d.curX - box.left
+    const curY = d.curY - box.top + scrollTop
+    const left = Math.min(d.anchorX, curX)
+    const right = Math.max(d.anchorX, curX)
+    const top = Math.min(d.anchorY, curY)
+    const bottom = Math.max(d.anchorY, curY)
 
-    // Select entries whose rendered rect intersects the marquee.
-    const next = new Set(d.base)
-    const nodes = scrollRef.current?.querySelectorAll('[data-path]') ?? []
-    for (const node of nodes) {
+    for (const node of el.querySelectorAll('[data-path]')) {
       const r = node.getBoundingClientRect()
-      if (r.left < left + width && r.right > left && r.top < top + height && r.bottom > top) {
-        next.add(node.dataset.path)
-      }
+      const nx = r.left - box.left
+      const ny = r.top - box.top + scrollTop
+      const inside = nx < right && nx + r.width > left && ny < bottom && ny + r.height > top
+      // Mounted rows are re-evaluated every frame (so deselect works); rows that
+      // scroll out keep whatever membership they had (persisted in `hits`).
+      if (inside) d.hits.add(node.dataset.path)
+      else d.hits.delete(node.dataset.path)
     }
-    setSelected(next)
+    setSelected(new Set([...d.base, ...d.hits]))
+
+    // Draw the overlay in viewport coords, clamped to the visible area.
+    const vTop = Math.max(top - scrollTop + box.top, box.top)
+    const vBottom = Math.min(bottom - scrollTop + box.top, box.bottom)
+    setMarquee({ left: left + box.left, top: vTop, width: right - left, height: Math.max(0, vBottom - vTop) })
   }, [])
+
+  const onSelectMove = useCallback(
+    (e) => {
+      const d = dragRef.current
+      if (!d) return
+      if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) return
+      d.moved = true
+      d.curX = e.clientX
+      d.curY = e.clientY
+
+      // Auto-scroll velocity from proximity to the viewport's top/bottom edge.
+      const box = scrollRef.current?.getBoundingClientRect()
+      const ZONE = 48
+      let v = 0
+      if (box) {
+        if (e.clientY < box.top + ZONE) v = -Math.ceil((box.top + ZONE - e.clientY) / 4)
+        else if (e.clientY > box.bottom - ZONE) v = Math.ceil((e.clientY - (box.bottom - ZONE)) / 4)
+      }
+      d.vel = Math.max(-28, Math.min(28, v))
+      applyMarquee()
+    },
+    [applyMarquee],
+  )
 
   const onSelectUp = useCallback(() => {
     const d = dragRef.current
     window.removeEventListener('mousemove', onSelectMove)
     window.removeEventListener('mouseup', onSelectUp)
+    if (d?.raf) cancelAnimationFrame(d.raf)
     setMarquee(null)
     if (d && !d.moved) {
-      // A plain click: select the clicked item, toggle with ctrl/meta, or clear.
-      if (d.downPath) {
+      if (d.downPath && d.shift && anchorRef.current) {
+        // Shift-click: select the whole range from the anchor — works across the
+        // virtualized list since it indexes the entries array, not the DOM.
+        const list = entriesRef.current
+        const a = list.findIndex((e) => e.path === anchorRef.current)
+        const b = list.findIndex((e) => e.path === d.downPath)
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a]
+          setSelected((prev) => {
+            const n = new Set(d.additive ? prev : [])
+            for (let i = lo; i <= hi; i++) n.add(list[i].path)
+            return n
+          })
+        }
+      } else if (d.downPath) {
+        // Plain click: select the item (toggle with ctrl/meta) and set the anchor.
+        anchorRef.current = d.downPath
         setSelected((prev) => {
           if (!d.additive) return new Set([d.downPath])
           const n = new Set(prev)
@@ -967,6 +681,7 @@ export default function App() {
         })
       } else if (!d.additive) {
         setSelected(new Set())
+        anchorRef.current = null
       }
     }
     dragRef.current = null
@@ -975,20 +690,46 @@ export default function App() {
   const onSelectDown = useCallback(
     (e) => {
       if (e.button !== 0) return
+      // Ignore clicks on the native scrollbar gutter — otherwise dragging the
+      // scrollbar starts a marquee and wipes the current selection.
+      const el = e.currentTarget
+      if (e.clientX >= el.getBoundingClientRect().left + el.clientWidth) return
+      if (e.clientY >= el.getBoundingClientRect().top + el.clientHeight) return
       if (e.target.closest('button, input, a, [role="slider"], [contenteditable="true"]')) return
       const additive = e.ctrlKey || e.metaKey
-      dragRef.current = {
+      const box = el.getBoundingClientRect()
+      const d = {
         startX: e.clientX,
         startY: e.clientY,
+        curX: e.clientX,
+        curY: e.clientY,
+        anchorX: e.clientX - box.left, // drag origin in content coordinates
+        anchorY: e.clientY - box.top + el.scrollTop,
         downPath: e.target.closest('[data-path]')?.dataset.path ?? null,
         additive,
+        shift: e.shiftKey,
         base: additive ? new Set(selected) : new Set(),
+        hits: new Set(), // rows that were inside the box, even after scrolling out
         moved: false,
+        vel: 0,
+        raf: 0,
       }
+      // Continuous loop so the list keeps auto-scrolling (and selecting newly
+      // revealed rows) even when the cursor is held still at an edge.
+      const tick = () => {
+        if (!dragRef.current) return
+        if (dragRef.current.vel && scrollRef.current) {
+          scrollRef.current.scrollTop += dragRef.current.vel
+          applyMarquee()
+        }
+        dragRef.current.raf = requestAnimationFrame(tick)
+      }
+      dragRef.current = d
+      d.raf = requestAnimationFrame(tick)
       window.addEventListener('mousemove', onSelectMove)
       window.addEventListener('mouseup', onSelectUp)
     },
-    [selected, onSelectMove, onSelectUp],
+    [selected, onSelectMove, onSelectUp, applyMarquee],
   )
 
   // Props shared by every view mode (key is passed explicitly at the call site).
@@ -1114,6 +855,22 @@ export default function App() {
             )}
           </Group>
           <Group gap={8} wrap="nowrap">
+            <TextInput
+              size="xs"
+              w={180}
+              placeholder={activeTagId ? 'Search (open a folder)' : 'Search this folder'}
+              disabled={!!activeTagId}
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              leftSection={searching && searchResults === null ? <Loader size={13} /> : <IconSearch size={14} />}
+              rightSection={
+                search ? (
+                  <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => setSearch('')}>
+                    <IconX size={13} />
+                  </ActionIcon>
+                ) : null
+              }
+            />
             <Menu shadow="md" width={190} position="bottom-end">
               <Menu.Target>
                 <Tooltip label="Sort" openDelay={400}>
@@ -1294,13 +1051,19 @@ export default function App() {
 
         <Box ref={scrollRef} onMouseDown={onSelectDown}
           style={{ flex: 1, minHeight: 0, overflowY: 'auto', userSelect: 'none' }}>
-          {loading ? (
+          {loading || (searching && searchResults === null) ? (
             <Center h={240}><Loader size="sm" /></Center>
           ) : entries.length === 0 ? (
-            !creating && emptyState
+            searching ? (
+              <Center h={220}>
+                <Text size="sm" c="dimmed">No matches for “{search.trim()}”</Text>
+              </Center>
+            ) : (
+              !creating && emptyState
+            )
           ) : (
             <VirtualEntries
-              key={activeTagId ? `tag:${activeTagId}` : `dir:${path}`}
+              key={searching ? `search:${search.trim()}` : activeTagId ? `tag:${activeTagId}` : `dir:${path}`}
               entries={entries}
               mode={mode}
               zoom={zoom}

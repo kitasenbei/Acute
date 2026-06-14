@@ -96,6 +96,22 @@ function AutoplayVideoControl() {
   return <Switch checked={autoplayVideo} onChange={(e) => setAutoplayVideo(e.currentTarget.checked)} />
 }
 
+function IconSourceControl() {
+  const iconSource = useSettingsStore((s) => s.iconSource)
+  const setIconSource = useSettingsStore((s) => s.setIconSource)
+  return (
+    <SegmentedControl
+      value={iconSource}
+      onChange={setIconSource}
+      size="sm"
+      data={[
+        { value: 'acute', label: 'Acute' },
+        { value: 'os', label: 'System' },
+      ]}
+    />
+  )
+}
+
 function ThumbnailFitControl() {
   const thumbnailFit = useSettingsStore((s) => s.thumbnailFit)
   const setThumbnailFit = useSettingsStore((s) => s.setThumbnailFit)
@@ -127,6 +143,9 @@ function GeneralPanel() {
         </Row>
         <Row label="Image thumbnails">
           <ThumbnailFitControl />
+        </Row>
+        <Row label="File icons">
+          <IconSourceControl />
         </Row>
       </Box>
     </Stack>
