@@ -32,6 +32,7 @@ import {
   IconCopy,
   IconCopyPlus,
   IconClipboard,
+  IconClipboardCopy,
   IconUpload,
   IconChevronRight,
   IconEye,
@@ -44,6 +45,10 @@ import {
   IconStar,
   IconStarFilled,
   IconFolder,
+  IconFolderFilled,
+  IconFileFilled,
+  IconPhotoFilled,
+  IconFileMusicFilled,
   IconSettings,
   IconTags,
   IconDeviceDesktop,
@@ -62,6 +67,8 @@ import {
   IconLayoutGrid,
   IconFilter,
   IconX,
+  IconPlaylist,
+  IconPlaylistAdd,
 } from '@tabler/icons-react'
 import { api } from './api.js'
 import { formatBytes, formatDate } from './util.js'
@@ -76,6 +83,8 @@ import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
 import { TagChips } from './components/TagManagerModal.jsx'
 import { SidebarTagTree } from './components/SidebarTagTree.jsx'
+import { NowPlaying } from './components/Playlist.jsx'
+import { useQueueStore } from './stores/queueStore.js'
 import { StatusBar } from './components/StatusBar.jsx'
 
 // Shared empty array keeps untagged rows' `tags` prop referentially stable.
@@ -114,6 +123,14 @@ const CONVERT_FORMATS = {
   ],
 }
 
+// Audio formats a video's soundtrack can be extracted to.
+const AUDIO_EXTRACT = [
+  { fmt: 'mp3', label: 'MP3' },
+  { fmt: 'm4a', label: 'M4A' },
+  { fmt: 'wav', label: 'WAV' },
+  { fmt: 'flac', label: 'FLAC' },
+]
+
 // Sort entries with folders always first, then by the chosen field/direction.
 function compareEntries(a, b, field, dir) {
   if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
@@ -135,17 +152,50 @@ const PLACES = [
   { name: 'Videos', icon: IconMovie },
 ]
 
+// Tabler has no filled PDF glyph, so compose one: a solid red document with a
+// small white "PDF" wordmark. Matches the (size, color) API of Tabler icons so
+// it slots into iconForEntry like any other.
+function PdfIcon({ size = 24, color = '#e03131' }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }}>
+      <IconFileFilled size={size} color={color} />
+      <span
+        style={{
+          position: 'absolute',
+          bottom: size * 0.17,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontSize: size * 0.24,
+          fontWeight: 800,
+          letterSpacing: size * 0.004,
+          lineHeight: 1,
+          color: '#fff',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      >
+        PDF
+      </span>
+    </span>
+  )
+}
+
+// Solid glyph + a single tone per kind, rendered directly (no colored tile).
+// Folders get a soft, intentionally theme-independent gold; file kinds borrow
+// their hue from Mantine's palette so they track light/dark.
 function iconForEntry(entry) {
-  if (entry.type === 'dir') return { Icon: IconFolder, color: 'yellow' }
+  if (entry.type === 'dir') return { Icon: IconFolderFilled, tone: '#e0aa3e' }
   const ext = entry.name.split('.').pop()?.toLowerCase() ?? ''
-  if (EXT.image.includes(ext)) return { Icon: IconPhoto, color: 'grape' }
-  if (EXT.pdf.includes(ext)) return { Icon: IconFileTypePdf, color: 'red' }
-  if (EXT.audio.includes(ext)) return { Icon: IconMusic, color: 'teal' }
-  if (EXT.video.includes(ext)) return { Icon: IconMovie, color: 'indigo' }
-  if (EXT.archive.includes(ext)) return { Icon: IconFileZip, color: 'orange' }
-  if (EXT.code.includes(ext)) return { Icon: IconCode, color: 'blue' }
-  if (EXT.text.includes(ext)) return { Icon: IconFileText, color: 'gray' }
-  return { Icon: IconFile, color: 'gray' }
+  const v = (c) => `var(--mantine-color-${c}-6)`
+  if (EXT.image.includes(ext)) return { Icon: IconPhotoFilled, tone: v('grape') }
+  if (EXT.pdf.includes(ext)) return { Icon: PdfIcon, tone: v('red') }
+  if (EXT.audio.includes(ext)) return { Icon: IconFileMusicFilled, tone: v('teal') }
+  if (EXT.video.includes(ext)) return { Icon: IconMovie, tone: v('indigo') }
+  if (EXT.archive.includes(ext)) return { Icon: IconFileZip, tone: v('orange') }
+  if (EXT.code.includes(ext)) return { Icon: IconCode, tone: v('blue') }
+  if (EXT.text.includes(ext)) return { Icon: IconFileText, tone: v('gray') }
+  return { Icon: IconFileFilled, tone: v('gray') }
 }
 
 const thumbBox = (size) => ({
@@ -160,8 +210,8 @@ const thumbBox = (size) => ({
 
 /** A square preview: a real thumbnail for image/video files, otherwise the
  * type icon. Falls back to the icon if the media fails to load. */
-function Thumb({ entry, size, iconSize }) {
-  const { Icon, color } = iconForEntry(entry)
+function Thumb({ entry, size }) {
+  const { Icon, tone } = iconForEntry(entry)
   const [failed, setFailed] = useState(false)
   const kind = fileKind(entry)
   const hasThumb = kind === 'image' || kind === 'video'
@@ -205,9 +255,9 @@ function Thumb({ entry, size, iconSize }) {
   }
 
   return (
-    <ThemeIcon variant="light" color={color} size={size} radius="md">
-      <Icon size={iconSize} />
-    </ThemeIcon>
+    <Center style={{ width: size, height: size, flexShrink: 0 }}>
+      <Icon size={Math.round(size * 0.68)} color={tone} />
+    </Center>
   )
 }
 
@@ -260,7 +310,6 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
   const isDir = entry.type === 'dir'
   const base = compact ? 24 : 32
   const thumbSize = Math.round(base * zoom)
-  const thumbIcon = Math.round((compact ? 14 : 18) * zoom)
 
   return (
     <Flex
@@ -283,7 +332,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
             : 'transparent',
       }}
     >
-      <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} />
+      <Thumb entry={entry} size={thumbSize} />
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {editing ? (
@@ -379,7 +428,7 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, se
         </Group>
       )}
 
-      <Thumb entry={entry} size={thumbSize} iconSize={Math.round(thumbSize / 2)} />
+      <Thumb entry={entry} size={thumbSize} />
 
       <Box w="100%" style={{ textAlign: 'center' }}>
         {editing ? (
@@ -494,6 +543,9 @@ export default function App() {
   const loadTags = useTagsStore((s) => s.loadAll)
   const toggleTag = useTagsStore((s) => s.toggleAssign)
   const openTagManager = useTagsStore((s) => s.openManager)
+  const enqueue = useQueueStore((s) => s.enqueue)
+  const toggleQueueOpen = useQueueStore((s) => s.toggleOpen)
+  const queueLen = useQueueStore((s) => s.queue.length)
 
   const load = useCallback(async (p, { silent } = {}) => {
     if (!silent) setLoading(true)
@@ -724,6 +776,22 @@ export default function App() {
     [run, loadFavorites],
   )
 
+  // Copy file path(s) to the clipboard — the absolute on-disk path under
+  // Electron, falling back to the root-relative path in a plain browser.
+  const copyPath = useCallback(async (paths) => {
+    let text = paths.join('\n')
+    if (window.native?.resolvePath) {
+      const abs = await Promise.all(paths.map((p) => window.native.resolvePath(p)))
+      const resolved = abs.filter(Boolean)
+      if (resolved.length) text = resolved.join('\n')
+    }
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      setError('Could not copy to clipboard')
+    }
+  }, [])
+
   // Build the right-click action list for an entry. Acts on the whole selection
   // when right-clicking a selected item (and more than one is selected).
   const buildMenuItems = useCallback((entry) => {
@@ -745,6 +813,18 @@ export default function App() {
       items.push({ divider: true })
     }
 
+    // Background play queue (audio targets only).
+    const audioTargets = targets.filter((p) => EXT.audio.includes(p.split('.').pop()?.toLowerCase() ?? ''))
+    if (audioTargets.length) {
+      const songs = audioTargets.map((p) => ({ path: p, name: p.split('/').pop() }))
+      items.push({
+        label: audioTargets.length > 1 ? `Add ${audioTargets.length} to queue` : 'Add to queue',
+        icon: IconPlaylistAdd,
+        onClick: () => enqueue(songs),
+      })
+      items.push({ divider: true })
+    }
+
     // Clipboard ops (work on the whole target set).
     items.push({ label: many ? `Cut ${targets.length} items` : 'Cut', icon: IconScissors, onClick: () => setClipboard(targets, 'cut') })
     items.push({ label: many ? `Copy ${targets.length} items` : 'Copy', icon: IconCopy, onClick: () => setClipboard(targets, 'copy') })
@@ -752,6 +832,7 @@ export default function App() {
       items.push({ label: `Paste (${clipItems.length})`, icon: IconClipboard, onClick: () => paste(entry.path) })
     }
     if (!many) items.push({ label: 'Duplicate', icon: IconCopyPlus, onClick: () => run(() => api.duplicate(entry.path)) })
+    items.push({ label: many ? 'Copy paths' : 'Copy path', icon: IconClipboardCopy, onClick: () => copyPath(targets) })
 
     items.push({ divider: true })
 
@@ -781,6 +862,16 @@ export default function App() {
         }
       }
 
+      // Pull a video's soundtrack out into a standalone audio file.
+      if (fileKind(entry) === 'video') {
+        const audioSub = AUDIO_EXTRACT.map(({ fmt, label }) => ({
+          label,
+          icon: IconMusic,
+          onClick: () => startConvert(entry.path, fmt),
+        }))
+        items.push({ label: 'Extract audio', icon: IconMusic, submenu: audioSub })
+      }
+
       // Tags: toggle each tag for this entry, plus a shortcut to the manager.
       items.push({ divider: true })
       const assigned = new Set(assignments[entry.path] || [])
@@ -798,7 +889,7 @@ export default function App() {
       onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -964,6 +1055,12 @@ export default function App() {
           {tags.length > 0 && <Divider my={6} />}
           <SidebarTagTree tags={tags} activeTagId={activeTagId} onSelect={loadTag} />
         </Box>
+        <NowPlaying />
+        <SidebarItem
+          icon={IconPlaylist}
+          label={queueLen ? `Playlist (${queueLen})` : 'Playlist'}
+          onClick={toggleQueueOpen}
+        />
         <SidebarItem icon={IconTags} label="Tags" onClick={() => openTagManager()} />
         <SidebarItem icon={IconSettings} label="Settings" onClick={() => openSettings()} />
       </Flex>

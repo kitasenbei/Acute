@@ -13,7 +13,7 @@ import { formatTime } from '../util.js'
 import { usePlayerStore } from '../stores/playerStore.js'
 
 /** Track title that scrolls (jukebox-style) only when it overflows. */
-function MarqueeTitle({ text }) {
+export function MarqueeTitle({ text, size, fw = 600, align = 'center' }) {
   const wrapRef = useRef(null)
   const innerRef = useRef(null)
   const [shift, setShift] = useState(0)
@@ -34,10 +34,11 @@ function MarqueeTitle({ text }) {
 
   const scrolling = shift > 0
   return (
-    <Box ref={wrapRef} style={{ width: '100%', overflow: 'hidden', textAlign: scrolling ? 'left' : 'center' }}>
+    <Box ref={wrapRef} style={{ width: '100%', overflow: 'hidden', textAlign: scrolling ? 'left' : align }}>
       <Text
         ref={innerRef}
-        fw={600}
+        fw={fw}
+        size={size}
         title={text}
         className={`audio-title-track${scrolling ? ' is-scrolling' : ''}`}
         style={{ '--marquee-shift': `-${shift}px`, '--marquee-duration': `${Math.max(4, (shift / 35) * 2)}s` }}
@@ -49,9 +50,8 @@ function MarqueeTitle({ text }) {
 }
 
 /**
- * Custom audio player: a gradient "album" tile (with an animated equalizer
- * while playing), the track name, a seek bar, and the shared persisted volume.
- * Themed surfaces, so it looks right in both light and dark.
+ * Custom audio player: the track name, a seek bar, transport controls, and the
+ * shared persisted volume. Themed surfaces, so it looks right in light and dark.
  */
 export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
   const audioRef = useRef(null)
@@ -116,8 +116,8 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
   }
 
   return (
-    <Box style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <Stack align="center" gap="lg" w={380} maw="100%">
+    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
+      <Stack align="center" gap="md" w={380} maw="100%">
         <MarqueeTitle text={name} />
 
         <Box w="100%">

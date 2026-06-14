@@ -1,4 +1,4 @@
-import { Box, Group, Text, Progress, ActionIcon } from '@mantine/core'
+import { Box, Group, Text, Progress, ActionIcon, Tooltip } from '@mantine/core'
 import { IconX, IconCheck, IconAlertTriangle } from '@tabler/icons-react'
 import { useJobsStore } from '../stores/jobsStore.js'
 import { formatBytes } from '../util.js'
@@ -6,6 +6,29 @@ import { formatBytes } from '../util.js'
 function JobInline({ job, onDismiss }) {
   const pct = Math.round((job.status === 'done' ? 1 : job.progress) * 100)
   const color = job.status === 'error' ? 'red' : job.status === 'done' ? 'teal' : 'blue'
+
+  // A failed job swaps the (now meaningless) progress bar for the error reason,
+  // truncated inline with the full message in a tooltip.
+  if (job.status === 'error') {
+    const reason = job.error || 'Failed'
+    return (
+      <Group gap={6} wrap="nowrap">
+        <IconAlertTriangle size={15} color="var(--mantine-color-red-6)" style={{ flexShrink: 0 }} />
+        <Text size="xs" c="dimmed" truncate style={{ maxWidth: 120 }} title={job.label}>
+          {job.label}
+        </Text>
+        <Tooltip label={reason} multiline w={280} withArrow>
+          <Text size="xs" c="red.6" truncate style={{ maxWidth: 220, cursor: 'help' }}>
+            {reason}
+          </Text>
+        </Tooltip>
+        <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => onDismiss(job.id)}>
+          <IconX size={13} />
+        </ActionIcon>
+      </Group>
+    )
+  }
+
   return (
     <Group gap={8} wrap="nowrap">
       <Text size="xs" c="dimmed" truncate style={{ maxWidth: 160 }} title={job.label}>
@@ -16,10 +39,8 @@ function JobInline({ job, onDismiss }) {
         <Text size="xs" c="dimmed" w={32} ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>
           {pct}%
         </Text>
-      ) : job.status === 'done' ? (
-        <IconCheck size={15} color="var(--mantine-color-teal-6)" />
       ) : (
-        <IconAlertTriangle size={15} color="var(--mantine-color-red-6)" />
+        <IconCheck size={15} color="var(--mantine-color-teal-6)" />
       )}
       <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => onDismiss(job.id)}>
         <IconX size={13} />
