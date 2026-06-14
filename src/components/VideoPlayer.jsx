@@ -176,6 +176,8 @@ export function VideoPlayer({ src, path }) {
         height: '74vh',
         background: '#000',
         overflow: 'hidden',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       <video
