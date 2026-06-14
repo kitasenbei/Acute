@@ -28,6 +28,7 @@ export function VideoPlayer({ src, path }) {
   const [hovering, setHovering] = useState(false)
   const [storyboard, setStoryboard] = useState(null)
   const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
+  const [scrubX, setScrubX] = useState(null) // cursor ratio (0..1) while dragging; null otherwise
   // Volume/mute are remembered across videos and sessions.
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -101,11 +102,14 @@ export function VideoPlayer({ src, path }) {
     const v = videoRef.current
     if (v) v.currentTime = s.time
     setCurrent(s.time)
+    // The visible scrubber follows the cursor, not the (precise) time.
+    setScrubX(Math.min(1, Math.max(0, (e.clientX - s.rect.left) / s.rect.width)))
     setSeekHover({ x: (s.time / s.duration) * s.rect.width, w: s.rect.width, time: s.time, dragging: true, precise: distAbove > 30 })
   }, [])
 
   const onScrubEnd = useCallback(() => {
     scrubRef.current = null
+    setScrubX(null) // snap the scrubber back to the actual time
     window.removeEventListener('pointermove', onScrubMove)
     window.removeEventListener('pointerup', onScrubEnd)
   }, [onScrubMove])
@@ -121,6 +125,7 @@ export function VideoPlayer({ src, path }) {
       scrubRef.current = { time: t, lastX: e.clientX, rect, duration: dur }
       if (videoRef.current) videoRef.current.currentTime = t
       setCurrent(t)
+      setScrubX(ratio)
       setSeekHover({ x: ratio * rect.width, w: rect.width, time: t, dragging: true, precise: false })
       window.addEventListener('pointermove', onScrubMove)
       window.addEventListener('pointerup', onScrubEnd)
@@ -149,6 +154,8 @@ export function VideoPlayer({ src, path }) {
   const controlsVisible = hovering || !playing
   const iconStyle = { color: '#fff' }
   const pct = duration ? (current / duration) * 100 : 0
+  // While dragging, the scrubber tracks the cursor; otherwise the real time.
+  const displayPct = scrubX != null ? scrubX * 100 : pct
   // Filmstrip reel shown when the bar is pulled up for precise seeking.
   const FILMSTRIP_H = 80
   const showStrip = !!(seekHover?.dragging && seekHover.precise && storyboard)
@@ -314,8 +321,8 @@ export function VideoPlayer({ src, path }) {
           })()}
           {/* track + filled + thumb */}
           <Box style={{ position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.3)' }} />
-          <Box style={{ position: 'absolute', left: 0, height: 4, borderRadius: 2, width: `${pct}%`, background: 'var(--mantine-primary-color-filled)' }} />
-          <Box style={{ position: 'absolute', left: `${pct}%`, top: '50%', width: 12, height: 12, borderRadius: '50%', background: '#fff', transform: 'translate(-50%, -50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)' }} />
+          <Box style={{ position: 'absolute', left: 0, height: 4, borderRadius: 2, width: `${displayPct}%`, background: 'var(--mantine-primary-color-filled)' }} />
+          <Box style={{ position: 'absolute', left: `${displayPct}%`, top: '50%', width: 12, height: 12, borderRadius: '50%', background: '#fff', transform: 'translate(-50%, -50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)' }} />
         </Box>
         <Group justify="space-between" gap="xs" wrap="nowrap">
           <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
