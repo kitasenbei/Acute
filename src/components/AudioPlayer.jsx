@@ -13,6 +13,42 @@ import {
 import { formatTime } from '../util.js'
 import { usePlayerStore } from '../stores/playerStore.js'
 
+/** Track title that scrolls (jukebox-style) only when it overflows. */
+function MarqueeTitle({ text }) {
+  const wrapRef = useRef(null)
+  const innerRef = useRef(null)
+  const [shift, setShift] = useState(0)
+
+  useEffect(() => {
+    const measure = () => {
+      const wrap = wrapRef.current
+      const inner = innerRef.current
+      if (!wrap || !inner) return
+      const overflow = inner.scrollWidth - wrap.clientWidth
+      setShift(overflow > 4 ? overflow : 0)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (wrapRef.current) ro.observe(wrapRef.current)
+    return () => ro.disconnect()
+  }, [text])
+
+  const scrolling = shift > 0
+  return (
+    <Box ref={wrapRef} style={{ width: '100%', overflow: 'hidden', textAlign: scrolling ? 'left' : 'center' }}>
+      <Text
+        ref={innerRef}
+        fw={600}
+        title={text}
+        className={`audio-title-track${scrolling ? ' is-scrolling' : ''}`}
+        style={{ '--marquee-shift': `-${shift}px`, '--marquee-duration': `${Math.max(4, (shift / 35) * 2)}s` }}
+      >
+        {text}
+      </Text>
+    </Box>
+  )
+}
+
 /**
  * Custom audio player: a gradient "album" tile (with an animated equalizer
  * while playing), the track name, a seek bar, and the shared persisted volume.
@@ -95,9 +131,7 @@ export function AudioPlayer({ src, name, onPrev, onNext, hasPrev, hasNext }) {
           )}
         </Box>
 
-        <Text fw={600} ta="center" truncate w="100%" title={name}>
-          {name}
-        </Text>
+        <MarqueeTitle text={name} />
 
         <Box w="100%">
           <Slider value={current} min={0} max={duration || 0} step={0.1} onChange={seek} size="sm" label={formatTime} />

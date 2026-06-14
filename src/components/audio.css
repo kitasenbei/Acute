@@ -35,3 +35,20 @@
     transform: scaleY(1);
   }
 }
+
+/* Rockola-style scrolling title: only animates when the text overflows. */
+.audio-title-track {
+  display: inline-block;
+  white-space: nowrap;
+}
+.audio-title-track.is-scrolling {
+  animation: audio-marquee var(--marquee-duration, 8s) ease-in-out infinite alternate;
+}
+@keyframes audio-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--marquee-shift, 0));
+  }
+}
