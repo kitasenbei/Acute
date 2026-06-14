@@ -12,7 +12,7 @@ import {
   Badge,
   Center,
 } from '@mantine/core'
-import { IconTrash, IconTags } from '@tabler/icons-react'
+import { IconTrash, IconTags, IconTagFilled } from '@tabler/icons-react'
 import { useTagsStore, buildTagTree } from '../stores/tagsStore.js'
 
 // A friendly default palette offered in the colour pickers.
@@ -203,8 +203,9 @@ export function TagChips({ tags, max = 3 }) {
           color={t.color}
           autoContrast
           title={t.name}
+          leftSection={<IconTagFilled size={9} />}
           styles={{
-            root: { maxWidth: 110, textTransform: 'none', fontWeight: 500 },
+            root: { maxWidth: 120, textTransform: 'none', fontWeight: 500 },
             label: { overflow: 'hidden', textOverflow: 'ellipsis' },
           }}
         >
