@@ -85,24 +85,25 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
-// Builds the custom drag image: clones of the actual row/tile components (their
-// real size, with thumbnail + name, hover buttons stripped) fanned out and
-// overlapping like scattered cards (up to 4), with an "N+" badge for the rest.
+// Builds the custom drag image: just the thumbnails (cloned from each row, no
+// name, no border) fanned out and overlapping like scattered cards (up to 4),
+// with an "N+" badge for the rest. Sized from the thumbnail's real rect.
 function buildDragGhost(paths) {
-  const nodeByPath = new Map()
+  // Each row's thumbnail is its first <img>, or the icon's <svg>.
+  const thumbByPath = new Map()
   for (const node of document.querySelectorAll('[data-path]')) {
-    nodeByPath.set(node.dataset.path, node)
+    const thumb = node.querySelector('img, svg')
+    if (thumb) thumbByPath.set(node.dataset.path, thumb)
   }
-  const sources = paths.map((p) => nodeByPath.get(p)).filter(Boolean)
+  const sources = paths.map((p) => thumbByPath.get(p)).filter(Boolean)
   const ref = sources[0]?.getBoundingClientRect()
-  const w = Math.round(ref?.width || 96)
-  const h = Math.round(ref?.height || 96)
+  const size = Math.round(ref?.width || ref?.height || 48)
 
   const n = paths.length
   const count = Math.min(sources.length || 1, 4)
   const angles = [-7, 5, -4, 8]
-  const step = 14
-  const pad = 30 // room for rotation + the overflow badge
+  const step = 12
+  const pad = 26 // room for rotation + the overflow badge
 
   const wrap = document.createElement('div')
   Object.assign(wrap.style, {
@@ -110,8 +111,8 @@ function buildDragGhost(paths) {
     top: '-2000px',
     left: '-2000px',
     pointerEvents: 'none',
-    width: `${w + step * (count - 1) + pad * 2}px`,
-    height: `${h + step * (count - 1) + pad * 2}px`,
+    width: `${size + step * (count - 1) + pad * 2}px`,
+    height: `${size + step * (count - 1) + pad * 2}px`,
   })
 
   for (let i = 0; i < count; i++) {
@@ -121,20 +122,13 @@ function buildDragGhost(paths) {
       position: 'absolute',
       left: `${pad + i * step}px`,
       top: `${pad + i * step}px`,
-      width: `${w}px`,
-      height: `${h}px`,
-      boxSizing: 'border-box',
-      border: '2px solid var(--mantine-color-text)',
-      borderRadius: '10px',
-      background: 'var(--mantine-color-body, #fff)',
-      overflow: 'hidden',
+      width: `${size}px`,
+      height: `${size}px`,
       transform: `rotate(${angles[i % angles.length]}deg)`,
     })
     if (src) {
-      // Clone the real component so the card shows its thumbnail + name.
       const clone = src.cloneNode(true)
-      clone.querySelectorAll('button').forEach((b) => b.remove())
-      Object.assign(clone.style, { width: '100%', height: '100%', margin: '0', background: 'transparent' })
+      Object.assign(clone.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'block' })
       card.appendChild(clone)
     }
     wrap.appendChild(card)
