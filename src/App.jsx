@@ -85,23 +85,24 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
-// Builds the custom drag image: transparent, real-component-sized outlines that
-// fan out and overlap like scattered cards (up to 4), with a small "N+" badge
-// when more are being moved. Sized from the grabbed row's actual rect.
+// Builds the custom drag image: clones of the actual row/tile components (their
+// real size, with thumbnail + name, hover buttons stripped) fanned out and
+// overlapping like scattered cards (up to 4), with an "N+" badge for the rest.
 function buildDragGhost(paths) {
-  const rectByPath = new Map()
+  const nodeByPath = new Map()
   for (const node of document.querySelectorAll('[data-path]')) {
-    rectByPath.set(node.dataset.path, node.getBoundingClientRect())
+    nodeByPath.set(node.dataset.path, node)
   }
-  const ref = paths.map((p) => rectByPath.get(p)).find(Boolean)
+  const sources = paths.map((p) => nodeByPath.get(p)).filter(Boolean)
+  const ref = sources[0]?.getBoundingClientRect()
   const w = Math.round(ref?.width || 96)
   const h = Math.round(ref?.height || 96)
 
   const n = paths.length
-  const count = Math.min(n, 4)
+  const count = Math.min(sources.length || 1, 4)
   const angles = [-7, 5, -4, 8]
-  const step = 12
-  const pad = 28 // room for rotation + the overflow badge
+  const step = 14
+  const pad = 30 // room for rotation + the overflow badge
 
   const wrap = document.createElement('div')
   Object.assign(wrap.style, {
@@ -114,8 +115,9 @@ function buildDragGhost(paths) {
   })
 
   for (let i = 0; i < count; i++) {
-    const sq = document.createElement('div')
-    Object.assign(sq.style, {
+    const src = sources[i]
+    const card = document.createElement('div')
+    Object.assign(card.style, {
       position: 'absolute',
       left: `${pad + i * step}px`,
       top: `${pad + i * step}px`,
@@ -124,10 +126,18 @@ function buildDragGhost(paths) {
       boxSizing: 'border-box',
       border: '2px solid var(--mantine-color-text)',
       borderRadius: '10px',
-      background: 'transparent',
+      background: 'var(--mantine-color-body, #fff)',
+      overflow: 'hidden',
       transform: `rotate(${angles[i % angles.length]}deg)`,
     })
-    wrap.appendChild(sq)
+    if (src) {
+      // Clone the real component so the card shows its thumbnail + name.
+      const clone = src.cloneNode(true)
+      clone.querySelectorAll('button').forEach((b) => b.remove())
+      Object.assign(clone.style, { width: '100%', height: '100%', margin: '0', background: 'transparent' })
+      card.appendChild(clone)
+    }
+    wrap.appendChild(card)
   }
 
   if (n > count) {
