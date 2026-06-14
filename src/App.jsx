@@ -632,6 +632,9 @@ export default function App() {
     (e) => {
       const d = dragRef.current
       if (!d) return
+      // Pressing an already-selected item is a potential drag-move, not a
+      // marquee — don't recompute (which would collapse the selection to it).
+      if (d.selectedAtDown) return
       if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) return
       d.moved = true
       d.curX = e.clientX
@@ -708,6 +711,7 @@ export default function App() {
         anchorX: e.clientX - box.left, // drag origin in content coordinates
         anchorY: e.clientY - box.top + el.scrollTop,
         downPath: e.target.closest('[data-path]')?.dataset.path ?? null,
+        selectedAtDown: false, // set below once downPath is known
         additive,
         shift: e.shiftKey,
         base: additive ? new Set(selected) : new Set(),
@@ -716,6 +720,7 @@ export default function App() {
         vel: 0,
         raf: 0,
       }
+      d.selectedAtDown = !!(d.downPath && selected.has(d.downPath))
       // Continuous loop so the list keeps auto-scrolling (and selecting newly
       // revealed rows) even when the cursor is held still at an edge.
       const tick = () => {
