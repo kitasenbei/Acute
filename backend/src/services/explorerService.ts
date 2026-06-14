@@ -76,13 +76,16 @@ export class ExplorerService {
     if (!stat.isDirectory()) throw new ValidationError('Not a directory')
 
     const prefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep
-    const scored: { entry: Entry; score: number }[] = []
+    // Substring ("strong") matches are kept separate from scattered fuzzy ones;
+    // we only fall back to fuzzy when nothing matched as a substring.
+    const strong: { entry: Entry; score: number }[] = []
+    const weak: { entry: Entry; score: number }[] = []
     const queue: string[] = [rootAbs]
     let visited = 0
     const MAX_DIRS = 20000
     const MAX_CANDIDATES = 5000
 
-    while (queue.length && visited < MAX_DIRS && scored.length < MAX_CANDIDATES) {
+    while (queue.length && visited < MAX_DIRS && strong.length + weak.length < MAX_CANDIDATES) {
       const dir = queue.shift() as string
       visited++
       let raw
@@ -92,28 +95,25 @@ export class ExplorerService {
         continue // unreadable directory — skip it
       }
       for (const e of raw) {
-        // Match against the path relative to the search root (not just the name),
-        // so a fuzzy query can span folders the way fff matches repo-relative paths.
         const relToRoot = e.abs.startsWith(prefix) ? e.abs.slice(prefix.length) : e.name
-        const score = scoreEntry(query, relToRoot, e.name)
-        if (score !== null) {
-          scored.push({
-            score,
-            entry: {
-              name: e.name,
-              path: this.resolver.toRelative(e.abs),
-              type: e.isDir ? ('dir' as const) : ('file' as const),
-              size: e.size,
-              modifiedAt: e.modifiedAt,
-            },
-          })
+        const m = scoreEntry(query, relToRoot, e.name)
+        if (m !== null) {
+          const entry: Entry = {
+            name: e.name,
+            path: this.resolver.toRelative(e.abs),
+            type: e.isDir ? ('dir' as const) : ('file' as const),
+            size: e.size,
+            modifiedAt: e.modifiedAt,
+          }
+          ;(m.strong ? strong : weak).push({ entry, score: m.score })
         }
         if (e.isDir) queue.push(e.abs)
       }
     }
 
-    scored.sort((a, b) => b.score - a.score || byFolderThenName(a.entry, b.entry))
-    return scored.slice(0, limit).map((s) => s.entry)
+    const chosen = strong.length ? strong : weak
+    chosen.sort((a, b) => b.score - a.score || byFolderThenName(a.entry, b.entry))
+    return chosen.slice(0, limit).map((s) => s.entry)
   }
 
   async createFolder(relParent: string, name: string): Promise<Entry> {

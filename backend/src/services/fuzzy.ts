@@ -70,7 +70,20 @@ export function fuzzyScore(query: string, text: string): number | null {
  * (AND); matches that also land in the filename get an extra boost, an exact
  * filename wins outright, and shorter paths break ties.
  */
-export function scoreEntry(query: string, relPath: string, name: string): number | null {
+/** Smart-case substring test: case-insensitive unless `needle` has an uppercase. */
+function includesSmart(haystack: string, needle: string): boolean {
+  return /[A-Z]/.test(needle)
+    ? haystack.includes(needle)
+    : haystack.toLowerCase().includes(needle.toLowerCase())
+}
+
+export interface EntryMatch {
+  score: number
+  /** True when every query part is a substring (not just a scattered subsequence). */
+  strong: boolean
+}
+
+export function scoreEntry(query: string, relPath: string, name: string): EntryMatch | null {
   const q = query.trim()
   const parts = q.split(/\s+/).filter(Boolean)
   if (!parts.length) return null
@@ -82,10 +95,12 @@ export function scoreEntry(query: string, relPath: string, name: string): number
   const target = q.includes('/') ? relPath : name
 
   let score = 0
+  let strong = true
   for (const part of parts) {
     const s = fuzzyScore(part, target)
     if (s === null) return null // a required part didn't match → drop the entry
     score += s
+    if (!includesSmart(target, part)) strong = false
   }
 
   // An exact filename match is the strongest possible signal — comparing both
@@ -97,5 +112,5 @@ export function scoreEntry(query: string, relPath: string, name: string): number
   }
 
   // Gently prefer shallower / shorter paths.
-  return score - relPath.length * 0.3
+  return { score: score - relPath.length * 0.3, strong }
 }
