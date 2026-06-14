@@ -89,10 +89,17 @@ import {
 // name, no border) fanned out and overlapping like scattered cards (up to 4),
 // with an "N+" badge for the rest. Sized from the thumbnail's real rect.
 function buildDragGhost(paths) {
-  // Each row's thumbnail is its first <img>, or the icon's <svg>.
+  // Each row's thumbnail is its first <img>/<svg> that isn't a hover-button icon
+  // (in grid mode the eye/pencil buttons precede the thumbnail in the DOM).
   const thumbByPath = new Map()
   for (const node of document.querySelectorAll('[data-path]')) {
-    const thumb = node.querySelector('img, svg')
+    let thumb = null
+    for (const el of node.querySelectorAll('img, svg')) {
+      if (!el.closest('button')) {
+        thumb = el
+        break
+      }
+    }
     if (thumb) thumbByPath.set(node.dataset.path, thumb)
   }
   const sources = paths.map((p) => thumbByPath.get(p)).filter(Boolean)
