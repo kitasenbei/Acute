@@ -101,12 +101,15 @@ export function VideoPlayer({ src, path }) {
     if (v) v.currentTime = s.time
     setCurrent(s.time)
     setScrubX(ratio)
-    setSeekHover({ x: ratio * s.rect.width, w: s.rect.width, time: s.time, dragging: true, precise: distAbove > 30 })
+    // How far the bar is "pulled up" (0..1) — drives the reel reveal live.
+    const pull = Math.min(1, distAbove / 70)
+    setSeekHover({ x: ratio * s.rect.width, w: s.rect.width, time: s.time, dragging: true, pull })
   }, [])
 
   const onScrubEnd = useCallback(() => {
     scrubRef.current = null
     setScrubX(null) // snap the scrubber back to the actual time
+    setSeekHover(null) // let the reel/controls ease back to rest
     window.removeEventListener('pointermove', onScrubMove)
     window.removeEventListener('pointerup', onScrubEnd)
   }, [onScrubMove])
@@ -123,7 +126,7 @@ export function VideoPlayer({ src, path }) {
       if (videoRef.current) videoRef.current.currentTime = t
       setCurrent(t)
       setScrubX(ratio)
-      setSeekHover({ x: ratio * rect.width, w: rect.width, time: t, dragging: true, precise: false })
+      setSeekHover({ x: ratio * rect.width, w: rect.width, time: t, dragging: true, pull: 0 })
       window.addEventListener('pointermove', onScrubMove)
       window.addEventListener('pointerup', onScrubEnd)
     },
@@ -153,10 +156,14 @@ export function VideoPlayer({ src, path }) {
   const pct = duration ? (current / duration) * 100 : 0
   // While dragging, the scrubber tracks the cursor; otherwise the real time.
   const displayPct = scrubX != null ? scrubX * 100 : pct
-  // Filmstrip reel shown when the bar is pulled up for precise seeking.
+  // Filmstrip reel reveal, driven continuously by how far the bar is pulled up.
   const FILMSTRIP_H = 80
   const CONTROLS_H = 36
-  const showStrip = !!(seekHover?.dragging && seekHover.precise && storyboard)
+  const dragging = !!seekHover?.dragging
+  const pull = dragging ? Math.min(1, Math.max(0, seekHover.pull ?? 0)) : 0
+  const precise = pull > 0.35
+  // No transition while dragging (track the cursor live); ease back on release.
+  const motion = dragging ? 'none' : 'opacity 200ms ease, transform 200ms ease'
 
   return (
     <Box
@@ -229,7 +236,7 @@ export function VideoPlayer({ src, path }) {
             const rect = seekRef.current?.getBoundingClientRect()
             if (!rect || !duration) return
             const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-            setSeekHover({ x: ratio * rect.width, w: rect.width, time: ratio * duration, dragging: false, precise: false })
+            setSeekHover({ x: ratio * rect.width, w: rect.width, time: ratio * duration, dragging: false, pull: 0 })
           }}
           onMouseLeave={() => !scrubRef.current && setSeekHover(null)}
           style={{ position: 'relative', height: 16, display: 'flex', alignItems: 'center', cursor: 'pointer', touchAction: 'none' }}
@@ -238,7 +245,7 @@ export function VideoPlayer({ src, path }) {
             const idx = Math.min(storyboard.count - 1, Math.max(0, Math.floor(seekHover.time / storyboard.interval)))
             const tx = (idx % storyboard.cols) * storyboard.tileW
             const ty = Math.floor(idx / storyboard.cols) * storyboard.tileH
-            const left = showStrip
+            const left = precise
               ? seekHover.w / 2
               : Math.min(seekHover.w - storyboard.tileW / 2, Math.max(storyboard.tileW / 2, seekHover.x))
             return (
@@ -287,10 +294,10 @@ export function VideoPlayer({ src, path }) {
           <Box style={{ position: 'absolute', left: 0, height: 4, borderRadius: 2, width: `${displayPct}%`, background: 'var(--mantine-primary-color-filled)' }} />
           <Box style={{ position: 'absolute', left: `${displayPct}%`, top: '50%', width: 12, height: 12, borderRadius: '50%', background: '#fff', transform: 'translate(-50%, -50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)' }} />
         </Box>
-        {/* Slot below the bar: controls normally; on pull-up they slide down and
-            the filmstrip reel rises from behind them into their place. */}
-        <Box style={{ position: 'relative', height: showStrip ? FILMSTRIP_H : CONTROLS_H, transition: 'height 220ms ease' }}>
-          {/* Reel — hidden behind the controls, rises up on pull-up. */}
+        {/* Slot below the bar: controls normally; pulling up slides them down and
+            the filmstrip reel rises from behind them, tracking the cursor live. */}
+        <Box style={{ position: 'relative', height: CONTROLS_H + (FILMSTRIP_H - CONTROLS_H) * pull, transition: dragging ? 'none' : 'height 200ms ease' }}>
+          {/* Reel — hidden behind the controls, rises up as you pull. */}
           {seekHover && storyboard && (() => {
             const frameW = FILMSTRIP_H * (storyboard.tileW / storyboard.tileH)
             const offset = seekHover.w / 2 - (current / storyboard.interval) * frameW
@@ -299,9 +306,9 @@ export function VideoPlayer({ src, path }) {
                 style={{
                   position: 'absolute', left: 0, right: 0, top: 0, height: FILMSTRIP_H,
                   overflow: 'hidden', background: '#000', borderRadius: 2, zIndex: 1, pointerEvents: 'none',
-                  opacity: showStrip ? 1 : 0,
-                  transform: showStrip ? 'translateY(0)' : 'translateY(16px)',
-                  transition: 'opacity 180ms ease, transform 220ms ease',
+                  opacity: pull,
+                  transform: `translateY(${(1 - pull) * 16}px)`,
+                  transition: motion,
                 }}
               >
                 <Box style={{ position: 'absolute', left: 0, top: 0, height: '100%', display: 'flex', transform: `translateX(${offset}px)`, willChange: 'transform' }}>
@@ -324,10 +331,10 @@ export function VideoPlayer({ src, path }) {
           <Box
             style={{
               position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2,
-              opacity: showStrip ? 0 : 1,
-              transform: showStrip ? 'translateY(44px)' : 'translateY(0)',
-              transition: 'opacity 160ms ease, transform 220ms ease',
-              pointerEvents: showStrip ? 'none' : 'auto',
+              opacity: 1 - pull,
+              transform: `translateY(${pull * 44}px)`,
+              transition: motion,
+              pointerEvents: pull > 0.5 ? 'none' : 'auto',
             }}
           >
             <Group justify="space-between" gap="xs" wrap="nowrap">
