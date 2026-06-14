@@ -85,6 +85,23 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
+// Minimal extension → MIME map for drag-out, so a copied file lands with the
+// right type in other apps (the filename carries the extension as a fallback).
+const MIME_TYPES = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml', tiff: 'image/tiff',
+  mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska', mov: 'video/quicktime',
+  avi: 'video/x-msvideo', m4v: 'video/x-m4v',
+  mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4',
+  ogg: 'audio/ogg', opus: 'audio/opus', aac: 'audio/aac',
+  pdf: 'application/pdf', json: 'application/json', txt: 'text/plain',
+  zip: 'application/zip', csv: 'text/csv', html: 'text/html', md: 'text/markdown',
+}
+function mimeForName(name) {
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : ''
+  return MIME_TYPES[ext] || 'application/octet-stream'
+}
+
 // Builds the custom drag image: just the thumbnails (cloned from each row, no
 // name, no border) fanned out and overlapping like scattered cards (up to 4),
 // with an "N+" badge for the rest. Sized from the thumbnail's real rect.
@@ -841,8 +858,17 @@ export default function App() {
         setSelected(new Set([entry.path]))
       }
       dragItemsRef.current = paths
-      e.dataTransfer.effectAllowed = 'move'
+      // copyMove: internal drops move; dropping into another app copies the file.
+      e.dataTransfer.effectAllowed = 'copyMove'
       e.dataTransfer.setData('text/plain', paths.join('\n'))
+
+      // Real file copy-out into other apps: a single file (or folder) is exposed
+      // as a downloadable URL with its MIME + name, so the OS/other app saves a
+      // real copy (matching its type) instead of just receiving the path text.
+      if (paths.length === 1 && entry.type !== 'dir') {
+        const name = paths[0].split('/').pop() || 'file'
+        e.dataTransfer.setData('DownloadURL', `${mimeForName(name)}:${name}:${api.contentUrl(paths[0])}`)
+      }
 
       // Replace the default ghost (a screenshot of the hovered row, hover buttons
       // and all) with a tidy "deck of cards": a single file shows its name; a
