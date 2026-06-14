@@ -22,8 +22,21 @@ const IMAGE_IN = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 't
 const VIDEO_OUT = new Set(['mp4', 'webm', 'mkv', 'mov'])
 const VIDEO_IN = new Set(['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v'])
 
+// Audio formats a video's soundtrack can be extracted to (ffmpeg picks the
+// encoder from the extension: mp3 → libmp3lame, m4a → aac, wav → pcm, …).
+const AUDIO_OUT = new Set(['mp3', 'm4a', 'wav', 'flac', 'ogg', 'opus', 'aac'])
+
 export interface ConvertServiceDeps {
   rootDir: string
+}
+
+/** Pull a human-readable reason out of ffmpeg's stderr (its last real line). */
+function ffmpegError(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  return lines[lines.length - 1] || 'unknown error'
 }
 
 /** Converts media between formats: images via sharp, videos via ffmpeg. */
@@ -63,10 +76,11 @@ export class ConvertService {
     }
 
     if (VIDEO_IN.has(srcExt)) {
-      if (!VIDEO_OUT.has(fmt)) throw new ValidationError('Unsupported video format')
+      const audioOnly = AUDIO_OUT.has(fmt)
+      if (!VIDEO_OUT.has(fmt) && !audioOnly) throw new ValidationError('Unsupported video format')
       const target = await this.uniquePath(abs, fmt)
       const duration = await this.probeDuration(abs).catch(() => 0)
-      await this.ffmpeg(abs, target, duration, onProgress)
+      await this.ffmpeg(abs, target, duration, onProgress, audioOnly)
       return this.entryOf(target)
     }
 
@@ -92,10 +106,18 @@ export class ConvertService {
     target: string,
     duration: number,
     onProgress?: (fraction: number) => void,
+    audioOnly = false,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', ['-y', '-i', src, '-progress', 'pipe:1', '-nostats', target], {
-        stdio: ['ignore', 'pipe', 'ignore'],
+      // `-vn` drops the video stream so only the soundtrack is encoded.
+      const args = ['-y', '-i', src, ...(audioOnly ? ['-vn'] : []), '-progress', 'pipe:1', '-nostats', target]
+      const ff = spawn('ffmpeg', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let stderr = ''
+      ff.stderr.on('data', (chunk: Buffer) => {
+        // Keep only the tail so the error message stays bounded.
+        stderr = (stderr + chunk.toString()).slice(-2000)
       })
       ff.stdout.on('data', (chunk: Buffer) => {
         if (!duration || !onProgress) return
@@ -104,7 +126,7 @@ export class ConvertService {
       })
       ff.on('error', () => reject(new NotFoundError('ffmpeg unavailable')))
       ff.on('close', (code) =>
-        code === 0 ? resolve() : reject(new ValidationError('Conversion failed')),
+        code === 0 ? resolve() : reject(new ValidationError(`Conversion failed: ${ffmpegError(stderr)}`)),
       )
     })
   }

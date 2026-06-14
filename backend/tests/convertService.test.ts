@@ -43,6 +43,23 @@ describe('ConvertService', () => {
     expect(lastProgress).toBeGreaterThan(0)
   }, 20000)
 
+  it('extracts a video soundtrack to audio (mp4 -> mp3)', async () => {
+    const src = path.join(stack.rootDir, 'tune.mp4')
+    await new Promise<void>((resolve, reject) => {
+      const ff = spawn(
+        'ffmpeg',
+        ['-y', '-f', 'lavfi', '-i', 'testsrc=d=1:s=32x32:r=10', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-shortest', src],
+        { stdio: 'ignore' },
+      )
+      ff.on('error', reject)
+      ff.on('close', (c) => (c === 0 ? resolve() : reject(new Error('gen'))))
+    })
+
+    const entry = await service.convert('tune.mp4', 'mp3')
+    expect(entry.name).toBe('tune.mp3')
+    expect((await fs.stat(path.join(stack.rootDir, 'tune.mp3'))).size).toBeGreaterThan(0)
+  }, 20000)
+
   it('rejects unsupported types', async () => {
     await fs.writeFile(path.join(stack.rootDir, 'x.txt'), 'hi')
     await expect(service.convert('x.txt', 'png')).rejects.toBeInstanceOf(ValidationError)
