@@ -69,12 +69,17 @@ export const api = {
     }).then(json)
   },
 
+  // Starts a background conversion job; returns the running job.
   convert(path, format) {
     return fetch(`${BASE}/api/fs/convert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, format }),
     }).then(json)
+  },
+
+  jobs() {
+    return fetch(`${BASE}/api/fs/jobs`).then(json)
   },
 
   upload(path, file) {

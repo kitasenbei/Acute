@@ -67,10 +67,12 @@ import { useViewStore } from './stores/viewStore.js'
 import { usePreviewStore } from './stores/previewStore.js'
 import { useContextMenuStore } from './stores/contextMenuStore.js'
 import { useClipboardStore } from './stores/clipboardStore.js'
+import { useJobsStore } from './stores/jobsStore.js'
 import { useTagsStore, buildTagTree } from './stores/tagsStore.js'
 import { VirtualEntries } from './components/VirtualEntries.jsx'
 import { TagChips } from './components/TagManagerModal.jsx'
 import { SidebarTagTree } from './components/SidebarTagTree.jsx'
+import { StatusBar } from './components/StatusBar.jsx'
 
 // Shared empty array keeps untagged rows' `tags` prop referentially stable.
 const EMPTY_TAGS = []
@@ -427,6 +429,7 @@ export default function App() {
   const resetRef = useRef(null)
   const contentRef = useRef(null)
   const scrollRef = useRef(null)
+  const jobStatusRef = useRef({})
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
@@ -443,6 +446,22 @@ export default function App() {
   const clipMode = useClipboardStore((s) => s.mode)
   const setClipboard = useClipboardStore((s) => s.setClipboard)
   const clearClipboard = useClipboardStore((s) => s.clear)
+  const jobs = useJobsStore((s) => s.jobs)
+  const addJob = useJobsStore((s) => s.add)
+  const dismissJob = useJobsStore((s) => s.dismiss)
+  const ensureJobPolling = useJobsStore((s) => s.ensurePolling)
+  const startConvert = useCallback(
+    (path, fmt) => {
+      api
+        .convert(path, fmt)
+        .then((job) => {
+          addJob(job)
+          ensureJobPolling()
+        })
+        .catch((e) => setError(e.message))
+    },
+    [addJob, ensureJobPolling],
+  )
   const tags = useTagsStore((s) => s.tags)
   const assignments = useTagsStore((s) => s.assignments)
   const loadTags = useTagsStore((s) => s.loadAll)
@@ -509,6 +528,23 @@ export default function App() {
       await Promise.all([load(''), loadFavorites(), loadPlaces(), loadTags()])
     })()
   }, [load, loadFavorites, loadPlaces, loadTags])
+
+  // When a background job finishes, refresh the view (the new file appears) and
+  // auto-dismiss it from the status bar shortly after.
+  useEffect(() => {
+    for (const j of jobs) {
+      const prev = jobStatusRef.current[j.id]
+      if (prev === 'running' && j.status !== 'running') {
+        if (j.status === 'done') {
+          if (activeTagId) loadTag(activeTagId, { silent: true })
+          else load(path, { silent: true })
+        }
+        const id = j.id
+        setTimeout(() => dismissJob(id), 4000)
+      }
+      jobStatusRef.current[j.id] = j.status
+    }
+  }, [jobs, load, loadTag, path, activeTagId, dismissJob])
 
   // Ctrl+wheel zooms thumbnails. A native non-passive listener is required so we
   // can preventDefault and stop Chromium's built-in page zoom.
@@ -673,7 +709,7 @@ export default function App() {
           .map(({ fmt, label }) => ({
             label,
             icon: IconPhoto,
-            onClick: () => run(() => api.convert(entry.path, fmt)),
+            onClick: () => startConvert(entry.path, fmt),
           }))
         if (submenu.length) {
           items.push({ divider: true })
@@ -698,7 +734,7 @@ export default function App() {
       onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
@@ -1041,6 +1077,8 @@ export default function App() {
             />
           )}
         </Box>
+
+        <StatusBar />
       </Flex>
 
       {marquee && (
