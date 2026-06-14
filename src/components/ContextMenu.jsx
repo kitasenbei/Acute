@@ -13,10 +13,11 @@ function renderItems(items, close) {
   return items.map((item, i) => {
     if (item.divider) return <Menu.Divider key={`divider-${i}`} />
 
-    // Native Mantine v8 submenu.
+    // Native Mantine v8 submenu. `withinPortal` so it escapes the dropdown's
+    // overflow clipping and flies out to the side instead of drawing inside.
     if (item.submenu) {
       return (
-        <Menu.Sub key={item.label}>
+        <Menu.Sub key={item.label} withinPortal>
           <Menu.Sub.Target>
             <Menu.Sub.Item leftSection={leftSectionFor(item)}>{item.label}</Menu.Sub.Item>
           </Menu.Sub.Target>
