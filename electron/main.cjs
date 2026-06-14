@@ -127,6 +127,31 @@ ipcMain.handle('native:resolvePath', (_e, relPath) => resolveInRoot(relPath))
 ipcMain.on('native:rootDir', (e) => {
   e.returnValue = ROOT_DIR
 })
+
+// Fallback drag icon (1x1 transparent) if the OS file icon can't be resolved.
+const DRAG_FALLBACK_ICON = nativeImage.createFromDataURL(
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAen63NgAAAAASUVORK5CYII=',
+)
+
+// Real OS file drag-out: drags actual files so other apps (file managers, chat,
+// uploads) receive real copies. Dropping back on our own window surfaces as a
+// normal DOM file drop, which the renderer treats as an internal move.
+ipcMain.on('native:startDrag', async (e, relPaths) => {
+  const files = (Array.isArray(relPaths) ? relPaths : []).map(resolveInRoot).filter(Boolean)
+  if (!files.length) return
+  let icon
+  try {
+    icon = await app.getFileIcon(files[0], { size: 'normal' })
+  } catch {
+    /* fall back below */
+  }
+  if (!icon || icon.isEmpty()) icon = DRAG_FALLBACK_ICON
+  try {
+    e.sender.startDrag({ file: files[0], files, icon })
+  } catch {
+    /* drag could not start */
+  }
+})
 // Copy to the OS clipboard: a single image goes on as a bitmap (so chat apps can
 // paste it); otherwise the file path(s) go on as text. Returns what was written.
 ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {

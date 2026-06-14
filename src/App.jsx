@@ -86,23 +86,6 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
-// Minimal extension → MIME map for drag-out, so a copied file lands with the
-// right type in other apps (the filename carries the extension as a fallback).
-const MIME_TYPES = {
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
-  webp: 'image/webp', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml', tiff: 'image/tiff',
-  mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska', mov: 'video/quicktime',
-  avi: 'video/x-msvideo', m4v: 'video/x-m4v',
-  mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4',
-  ogg: 'audio/ogg', opus: 'audio/opus', aac: 'audio/aac',
-  pdf: 'application/pdf', json: 'application/json', txt: 'text/plain',
-  zip: 'application/zip', csv: 'text/csv', html: 'text/html', md: 'text/markdown',
-}
-function mimeForName(name) {
-  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : ''
-  return MIME_TYPES[ext] || 'application/octet-stream'
-}
-
 // Builds the custom drag image: just the thumbnails (cloned from each row, no
 // name, no border) fanned out and overlapping like scattered cards (up to 4),
 // with an "N+" badge for the rest. Sized from the thumbnail's real rect.
@@ -208,6 +191,7 @@ export default function App() {
   const anchorRef = useRef(null) // last clicked path, for shift-range selection
   const entriesRef = useRef([]) // current visible entries, for index-based selection
   const dragItemsRef = useRef([]) // paths being drag-moved
+  const internalDragRef = useRef(false) // a drag started inside Acute is in flight
   const [dropTarget, setDropTarget] = useState(null) // folder path under the drag
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
@@ -886,29 +870,24 @@ export default function App() {
         setSelected(new Set([entry.path]))
       }
       dragItemsRef.current = paths
-      // copyMove: internal drops move; dropping into another app copies the file.
+      internalDragRef.current = true
+      // Reset the in-flight flag when the drag ends (so a later *external* file
+      // drop isn't mistaken for our own).
+      window.addEventListener('dragend', () => { internalDragRef.current = false }, { once: true })
+
+      // In Electron, hand off to a real OS drag so files can be dropped into
+      // other apps (file managers, chat, uploads). The OS provides the drag
+      // image, so our custom deck isn't shown here; internal move-to-folder
+      // still works because dropping back on our window is a normal file drop.
+      if (window.native?.startDrag) {
+        e.preventDefault()
+        window.native.startDrag(paths)
+        return
+      }
+
+      // Browser fallback: HTML5 drag with the custom deck ghost.
       e.dataTransfer.effectAllowed = 'copyMove'
       e.dataTransfer.setData('text/plain', paths.join('\n'))
-
-      // Drag-out into native apps (file managers like PCManFM, etc.) read
-      // text/uri-list with local file:// URIs to copy the real file(s).
-      const root = window.native?.rootDir
-      if (root) {
-        const base = root.replace(/\/+$/, '')
-        const toUri = (p) =>
-          'file://' + `${base}/${p}`.split('/').map((seg, i) => (i === 0 ? seg : encodeURIComponent(seg))).join('/')
-        e.dataTransfer.setData('text/uri-list', paths.map(toUri).join('\r\n') + '\r\n')
-      }
-
-      // Also expose a single file as a downloadable URL (Chromium drop targets).
-      if (paths.length === 1 && entry.type !== 'dir') {
-        const name = paths[0].split('/').pop() || 'file'
-        e.dataTransfer.setData('DownloadURL', `${mimeForName(name)}:${name}:${api.contentUrl(paths[0])}`)
-      }
-
-      // Replace the default ghost (a screenshot of the hovered row, hover buttons
-      // and all) with a tidy "deck of cards": a single file shows its name; a
-      // multi-move fans out up to 4 cards, the last an overflow count when needed.
       const ghost = buildDragGhost(paths)
       document.body.appendChild(ghost)
       e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2)
@@ -923,6 +902,7 @@ export default function App() {
     (destDir) => {
       const items = dragItemsRef.current
       dragItemsRef.current = []
+      internalDragRef.current = false
       setDropTarget(null)
       const targets = items.filter((p) => {
         if (p === destDir) return false
@@ -1042,9 +1022,9 @@ export default function App() {
         ref={contentRef}
         direction="column"
         style={{ flex: 1, minWidth: 0, outline: dragOver ? '2px dashed var(--mantine-color-blue-5)' : 'none', outlineOffset: -8 }}
-        onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer.types.includes('Files')) setDragOver(true) }}
+        onDragOver={(e) => { e.preventDefault(); if (!internalDragRef.current && e.dataTransfer.types.includes('Files')) setDragOver(true) }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!activeTagId && e.dataTransfer.files.length) uploadAll(e.dataTransfer.files) }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!internalDragRef.current && !activeTagId && e.dataTransfer.files.length) uploadAll(e.dataTransfer.files) }}
       >
         <Flex align="center" justify="space-between" gap="sm" px="md" h={52}
           style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>

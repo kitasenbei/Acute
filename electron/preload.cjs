@@ -22,4 +22,6 @@ contextBridge.exposeInMainWorld('native', {
   fileIcon: (relPath) => ipcRenderer.invoke('native:fileIcon', relPath),
   // Copy file(s) to the OS clipboard (image bitmap when possible, else paths).
   copyToClipboard: (relPaths) => ipcRenderer.invoke('native:copyToClipboard', relPaths),
+  // Start a native OS drag of real files (drag-out into other apps).
+  startDrag: (relPaths) => ipcRenderer.send('native:startDrag', relPaths),
 })
