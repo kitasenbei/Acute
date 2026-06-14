@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction, RequestHandler } from 'express'
 import { ValidationError } from '../errors.js'
 import type { ExplorerService } from '../services/explorerService.js'
 import type { ThumbnailService } from '../services/thumbnailService.js'
+import type { StoryboardService } from '../services/storyboardService.js'
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>
 
@@ -33,6 +34,7 @@ export class ExplorerController {
   constructor(
     private readonly service: ExplorerService,
     private readonly thumbnails: ThumbnailService,
+    private readonly storyboards: StoryboardService,
   ) {}
 
   list = wrap(async (req, res) => {
@@ -44,6 +46,16 @@ export class ExplorerController {
     const file = await this.thumbnails.getThumbnail(pathParam(req.query.path), size)
     res.setHeader('Cache-Control', 'private, max-age=3600')
     res.type('image/webp').sendFile(file)
+  })
+
+  storyboard = wrap(async (req, res) => {
+    const sb = await this.storyboards.getStoryboard(pathParam(req.query.path))
+    res.setHeader('X-SB-Cols', String(sb.cols))
+    res.setHeader('X-SB-Rows', String(sb.rows))
+    res.setHeader('X-SB-Interval', String(sb.interval))
+    res.setHeader('X-SB-Count', String(sb.count))
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.type('image/jpeg').sendFile(sb.file)
   })
 
   createFolder = wrap(async (req, res) => {

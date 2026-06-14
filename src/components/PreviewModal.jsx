@@ -110,7 +110,7 @@ function PreviewBody({ entry, nav }) {
         </Center>
       )
     case 'video':
-      return <VideoPlayer src={url} />
+      return <VideoPlayer src={url} path={entry.path} />
     case 'audio':
       return <AudioPlayer src={url} name={entry.name} {...nav} />
     case 'pdf':

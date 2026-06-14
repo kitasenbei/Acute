@@ -10,6 +10,7 @@ export function createExplorerRouter(controller: ExplorerController): Router {
   const router = Router()
   router.get('/', controller.list)
   router.get('/thumbnail', controller.thumbnail)
+  router.get('/storyboard', controller.storyboard)
   router.post('/folder', controller.createFolder)
   router.post('/upload', upload.single('file'), controller.upload)
   router.get('/content', controller.download)

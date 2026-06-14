@@ -66,6 +66,20 @@ export const api = {
     return `${BASE}/api/fs/thumbnail${q(path)}&w=${size}`
   },
 
+  /** Fetch a video's hover-preview sprite sheet + its tiling metadata. */
+  async storyboard(path) {
+    const res = await fetch(`${BASE}/api/fs/storyboard${q(path)}`)
+    if (!res.ok) throw new Error('No storyboard')
+    const url = URL.createObjectURL(await res.blob())
+    return {
+      url,
+      cols: Number(res.headers.get('X-SB-Cols')),
+      rows: Number(res.headers.get('X-SB-Rows')),
+      interval: Number(res.headers.get('X-SB-Interval')),
+      count: Number(res.headers.get('X-SB-Count')),
+    }
+  },
+
   async download(entry) {
     const res = await fetch(`${BASE}/api/fs/content${q(entry.path)}`)
     if (!res.ok) throw new Error('Download failed')

@@ -8,6 +8,7 @@ import {
   IconMaximize,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
+import { api } from '../api.js'
 import { usePlayerStore } from '../stores/playerStore.js'
 import { useSettingsStore } from '../stores/settingsStore.js'
 
@@ -16,13 +17,16 @@ import { useSettingsStore } from '../stores/settingsStore.js'
  * aspect ratio preserved) and the native controls are replaced with a clean
  * control bar that fades in on hover / while paused.
  */
-export function VideoPlayer({ src }) {
+export function VideoPlayer({ src, path }) {
   const videoRef = useRef(null)
   const stageRef = useRef(null)
+  const seekRef = useRef(null)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
   const [hovering, setHovering] = useState(false)
+  const [storyboard, setStoryboard] = useState(null)
+  const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
   // Volume/mute are remembered across videos and sessions.
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -35,7 +39,33 @@ export function VideoPlayer({ src }) {
     setPlaying(false)
     setCurrent(0)
     setDuration(0)
+    setSeekHover(null)
   }, [src])
+
+  // Fetch the hover-preview sprite sheet for this video (best-effort).
+  useEffect(() => {
+    if (!path) return
+    let cancelled = false
+    let objectUrl
+    setStoryboard(null)
+    api
+      .storyboard(path)
+      .then((sb) => {
+        objectUrl = sb.url
+        const img = new Image()
+        img.onload = () => {
+          if (cancelled) return URL.revokeObjectURL(sb.url)
+          setStoryboard({ ...sb, tileW: img.naturalWidth / sb.cols, tileH: img.naturalHeight / sb.rows })
+        }
+        img.onerror = () => !cancelled && URL.revokeObjectURL(sb.url)
+        img.src = sb.url
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [path])
 
   // Apply the remembered volume/mute to the element.
   useEffect(() => {
@@ -146,17 +176,54 @@ export function VideoPlayer({ src }) {
           pointerEvents: controlsVisible ? 'auto' : 'none',
         }}
       >
-        <Slider
-          value={current}
-          max={duration || 0}
-          min={0}
-          step={0.1}
-          onChange={seek}
-          size="sm"
-          label={formatTime}
-          styles={{ track: { cursor: 'pointer' }, thumb: { transition: 'none' } }}
+        <Box
+          ref={seekRef}
           mb={6}
-        />
+          style={{ position: 'relative' }}
+          onMouseMove={(e) => {
+            const rect = seekRef.current?.getBoundingClientRect()
+            if (!rect || !duration) return
+            const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+            setSeekHover({ x: ratio * rect.width, w: rect.width, time: ratio * duration })
+          }}
+          onMouseLeave={() => setSeekHover(null)}
+        >
+          {seekHover && storyboard && (() => {
+            const idx = Math.min(storyboard.count - 1, Math.max(0, Math.floor(seekHover.time / storyboard.interval)))
+            const tx = (idx % storyboard.cols) * storyboard.tileW
+            const ty = Math.floor(idx / storyboard.cols) * storyboard.tileH
+            const left = Math.min(seekHover.w - storyboard.tileW / 2, Math.max(storyboard.tileW / 2, seekHover.x))
+            return (
+              <Box style={{ position: 'absolute', bottom: '100%', left, transform: 'translateX(-50%)', marginBottom: 10, pointerEvents: 'none', zIndex: 5 }}>
+                <Box
+                  style={{
+                    width: storyboard.tileW,
+                    height: storyboard.tileH,
+                    backgroundImage: `url(${storyboard.url})`,
+                    backgroundPosition: `-${tx}px -${ty}px`,
+                    backgroundSize: `${storyboard.cols * storyboard.tileW}px ${storyboard.rows * storyboard.tileH}px`,
+                    borderRadius: 4,
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+                  }}
+                />
+                <Text ta="center" size="xs" c="white" mt={2} style={{ textShadow: '0 1px 2px #000' }}>
+                  {formatTime(seekHover.time)}
+                </Text>
+              </Box>
+            )
+          })()}
+          <Slider
+            value={current}
+            max={duration || 0}
+            min={0}
+            step={0.1}
+            onChange={seek}
+            size="sm"
+            label={formatTime}
+            styles={{ track: { cursor: 'pointer' }, thumb: { transition: 'none' } }}
+          />
+        </Box>
         <Group justify="space-between" gap="xs" wrap="nowrap">
           <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
             <ActionIcon variant="transparent" style={iconStyle} onClick={togglePlay}>
