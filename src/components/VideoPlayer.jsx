@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, Group, Slider, ActionIcon, Text } from '@mantine/core'
 import {
   IconPlayerPlayFilled,
@@ -6,6 +6,7 @@ import {
   IconVolume,
   IconVolumeOff,
   IconMaximize,
+  IconChevronUp,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
 import { api } from '../api.js'
@@ -85,13 +86,47 @@ export function VideoPlayer({ src, path }) {
     else v.pause()
   }
 
-  const seek = (val) => {
-    const v = video()
-    if (v) {
-      v.currentTime = val
-      setCurrent(val)
-    }
-  }
+  // --- Custom scrubber with "pull up for precise seeking" ------------------
+  const scrubRef = useRef(null)
+
+  const onScrubMove = useCallback((e) => {
+    const s = scrubRef.current
+    if (!s) return
+    // Pulling the cursor up from the bar scales horizontal movement down.
+    const distAbove = Math.max(0, s.rect.top - e.clientY)
+    const precision = 1 + distAbove / 55
+    const dx = e.clientX - s.lastX
+    s.lastX = e.clientX
+    s.time = Math.min(s.duration, Math.max(0, s.time + ((dx / s.rect.width) * s.duration) / precision))
+    const v = videoRef.current
+    if (v) v.currentTime = s.time
+    setCurrent(s.time)
+    setSeekHover({ x: (s.time / s.duration) * s.rect.width, w: s.rect.width, time: s.time, dragging: true, precise: distAbove > 30 })
+  }, [])
+
+  const onScrubEnd = useCallback(() => {
+    scrubRef.current = null
+    window.removeEventListener('pointermove', onScrubMove)
+    window.removeEventListener('pointerup', onScrubEnd)
+  }, [onScrubMove])
+
+  const onScrubStart = useCallback(
+    (e) => {
+      if (e.button) return
+      const rect = seekRef.current?.getBoundingClientRect()
+      const dur = videoRef.current?.duration || 0
+      if (!rect || !dur) return
+      const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+      const t = ratio * dur
+      scrubRef.current = { time: t, lastX: e.clientX, rect, duration: dur }
+      if (videoRef.current) videoRef.current.currentTime = t
+      setCurrent(t)
+      setSeekHover({ x: ratio * rect.width, w: rect.width, time: t, dragging: true, precise: false })
+      window.addEventListener('pointermove', onScrubMove)
+      window.addEventListener('pointerup', onScrubEnd)
+    },
+    [onScrubMove, onScrubEnd],
+  )
 
   const toggleMute = () => setMuted(!muted)
 
@@ -113,6 +148,11 @@ export function VideoPlayer({ src, path }) {
 
   const controlsVisible = hovering || !playing
   const iconStyle = { color: '#fff' }
+  const pct = duration ? (current / duration) * 100 : 0
+  // Filmstrip reel shown when the bar is pulled up for precise seeking.
+  const FILMSTRIP_H = 76
+  const STRIP_FRAMES = 14
+  const showStrip = !!(seekHover?.dragging && seekHover.precise && storyboard)
 
   return (
     <Box
@@ -176,17 +216,44 @@ export function VideoPlayer({ src, path }) {
           pointerEvents: controlsVisible ? 'auto' : 'none',
         }}
       >
+        {/* Filmstrip reel (full width) while pulled up for precise seeking. */}
+        {showStrip && (
+          <Box style={{ display: 'flex', height: FILMSTRIP_H, marginLeft: -12, marginRight: -12, marginBottom: 10, overflow: 'hidden' }}>
+            {Array.from({ length: STRIP_FRAMES }).map((_, i) => {
+              const index = Math.round((i / (STRIP_FRAMES - 1)) * (storyboard.count - 1))
+              const col = index % storyboard.cols
+              const row = Math.floor(index / storyboard.cols)
+              const bx = storyboard.cols > 1 ? (col / (storyboard.cols - 1)) * 100 : 0
+              const by = storyboard.rows > 1 ? (row / (storyboard.rows - 1)) * 100 : 0
+              return (
+                <Box
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: '100%',
+                    backgroundImage: `url(${storyboard.url})`,
+                    backgroundSize: `${storyboard.cols * 100}% ${storyboard.rows * 100}%`,
+                    backgroundPosition: `${bx}% ${by}%`,
+                    borderRight: '1px solid rgba(0,0,0,0.35)',
+                  }}
+                />
+              )
+            })}
+          </Box>
+        )}
         <Box
           ref={seekRef}
           mb={6}
-          style={{ position: 'relative' }}
+          onPointerDown={onScrubStart}
           onMouseMove={(e) => {
+            if (scrubRef.current) return
             const rect = seekRef.current?.getBoundingClientRect()
             if (!rect || !duration) return
             const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-            setSeekHover({ x: ratio * rect.width, w: rect.width, time: ratio * duration })
+            setSeekHover({ x: ratio * rect.width, w: rect.width, time: ratio * duration, dragging: false, precise: false })
           }}
-          onMouseLeave={() => setSeekHover(null)}
+          onMouseLeave={() => !scrubRef.current && setSeekHover(null)}
+          style={{ position: 'relative', height: 16, display: 'flex', alignItems: 'center', cursor: 'pointer', touchAction: 'none' }}
         >
           {seekHover && storyboard && (() => {
             const idx = Math.min(storyboard.count - 1, Math.max(0, Math.floor(seekHover.time / storyboard.interval)))
@@ -194,7 +261,28 @@ export function VideoPlayer({ src, path }) {
             const ty = Math.floor(idx / storyboard.cols) * storyboard.tileH
             const left = Math.min(seekHover.w - storyboard.tileW / 2, Math.max(storyboard.tileW / 2, seekHover.x))
             return (
-              <Box style={{ position: 'absolute', bottom: '100%', left, transform: 'translateX(-50%)', marginBottom: 10, pointerEvents: 'none', zIndex: 5 }}>
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left,
+                  transform: 'translateX(-50%)',
+                  marginBottom: showStrip ? FILMSTRIP_H + 16 : 12,
+                  pointerEvents: 'none',
+                  zIndex: 5,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+                {seekHover.dragging && (
+                  <Group gap={2} mb={6} wrap="nowrap" style={{ whiteSpace: 'nowrap' }}>
+                    <IconChevronUp size={14} color="#fff" />
+                    <Text size="xs" fw={600} c="white" style={{ textShadow: '0 1px 2px #000' }}>
+                      Pull up for precise seeking
+                    </Text>
+                  </Group>
+                )}
                 <Box
                   style={{
                     width: storyboard.tileW,
@@ -203,26 +291,20 @@ export function VideoPlayer({ src, path }) {
                     backgroundPosition: `-${tx}px -${ty}px`,
                     backgroundSize: `${storyboard.cols * storyboard.tileW}px ${storyboard.rows * storyboard.tileH}px`,
                     borderRadius: 4,
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    boxShadow: '0 2px 10px rgba(0,0,0,0.6)',
+                    border: '2px solid #fff',
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.7)',
                   }}
                 />
-                <Text ta="center" size="xs" c="white" mt={2} style={{ textShadow: '0 1px 2px #000' }}>
+                <Text size="xs" c="white" fw={600} mt={8} px={8} py={2} style={{ background: 'rgba(0,0,0,0.75)', borderRadius: 10 }}>
                   {formatTime(seekHover.time)}
                 </Text>
               </Box>
             )
           })()}
-          <Slider
-            value={current}
-            max={duration || 0}
-            min={0}
-            step={0.1}
-            onChange={seek}
-            size="sm"
-            label={formatTime}
-            styles={{ track: { cursor: 'pointer' }, thumb: { transition: 'none' } }}
-          />
+          {/* track + filled + thumb */}
+          <Box style={{ position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.3)' }} />
+          <Box style={{ position: 'absolute', left: 0, height: 4, borderRadius: 2, width: `${pct}%`, background: 'var(--mantine-primary-color-filled)' }} />
+          <Box style={{ position: 'absolute', left: `${pct}%`, top: '50%', width: 12, height: 12, borderRadius: '50%', background: '#fff', transform: 'translate(-50%, -50%)', boxShadow: '0 0 0 1px rgba(0,0,0,0.35)' }} />
         </Box>
         <Group justify="space-between" gap="xs" wrap="nowrap">
           <Group gap={6} wrap="nowrap" style={{ flex: 1 }}>
