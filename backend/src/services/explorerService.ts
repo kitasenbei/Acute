@@ -30,6 +30,15 @@ export interface FileContent {
   content: Buffer
 }
 
+// A single indexed entry: enough to score (name + path-relative-to-root) and to
+// stat lazily for the few that become results. No size/mtime stored.
+interface IndexEntry {
+  abs: string
+  name: string
+  isDir: boolean
+  rel: string // path relative to the search root
+}
+
 /**
  * Business tier for filesystem browsing.
  *
@@ -41,9 +50,22 @@ export class ExplorerService {
   private readonly fs: FileSystem
   private readonly resolver: PathResolver
 
+  // In-memory search index, keyed by the absolute search root. Each entry is the
+  // cheap (name + isDir, no stat) shape collected by one walk; repeat searches
+  // scan this in memory instead of touching the disk. Kept small (a few roots),
+  // expired by TTL, and cleared whenever Acute mutates the filesystem.
+  private readonly searchIndex = new Map<string, { entries: IndexEntry[]; builtAt: number }>()
+  private static readonly INDEX_TTL = 30_000
+  private static readonly INDEX_MAX_ROOTS = 6
+
   constructor({ fileSystem, rootDir }: ExplorerDeps) {
     this.fs = fileSystem
     this.resolver = new PathResolver(rootDir)
+  }
+
+  /** Drop cached search indexes — called after any filesystem mutation. */
+  private invalidateSearchIndex(): void {
+    this.searchIndex.clear()
   }
 
   /** Free/total bytes of the disk holding the browsing root. */
@@ -75,12 +97,12 @@ export class ExplorerService {
   }
 
   /**
-   * Recursively fuzzy-find entries under `relDir`, fff-style: every entry's path
-   * (relative to the search root) is scored against the query as a subsequence
-   * with boundary/consecutive bonuses, and results are returned best-first.
-   *
-   * The walk is breadth-first and bounded (directory-visit cap + candidate cap)
-   * so a huge tree can't hang; `limit` caps the returned top matches.
+   * Recursively fuzzy-find entries under `relDir`, fff-style. The first search
+   * under a root walks the tree once to build an in-memory index (cheap: no
+   * per-entry stat); subsequent searches scan that index in memory — no disk —
+   * until it expires or a mutation invalidates it. Matches are scored as
+   * subsequences with boundary/consecutive bonuses and returned best-first;
+   * `onMatch` streams the chosen results in rank order.
    */
   async search(
     relDir = '',
@@ -93,74 +115,103 @@ export class ExplorerService {
     const stat = await this.statOrThrow(rootAbs)
     if (!stat.isDirectory()) throw new ValidationError('Not a directory')
 
+    const entries = await this.getSearchIndex(rootAbs)
+    return this.matchIndex(entries, query, onMatch, limit)
+  }
+
+  /** Reuse a fresh cached index for `rootAbs`, else build and cache one. */
+  private async getSearchIndex(rootAbs: string): Promise<IndexEntry[]> {
+    const cached = this.searchIndex.get(rootAbs)
+    if (cached && Date.now() - cached.builtAt < ExplorerService.INDEX_TTL) return cached.entries
+
+    const entries = await this.buildSearchIndex(rootAbs)
+    this.searchIndex.set(rootAbs, { entries, builtAt: Date.now() })
+    // Keep only the most-recent few roots.
+    while (this.searchIndex.size > ExplorerService.INDEX_MAX_ROOTS) {
+      const oldest = this.searchIndex.keys().next().value as string
+      this.searchIndex.delete(oldest)
+    }
+    return entries
+  }
+
+  /** One parallel, stat-free walk collecting every searchable entry under root. */
+  private async buildSearchIndex(rootAbs: string): Promise<IndexEntry[]> {
     const prefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep
-    // Substring ("strong") matches are kept separate from scattered fuzzy ones;
-    // we only fall back to fuzzy when nothing matched as a substring. Strong
-    // matches are emitted to `onMatch` as the walk finds them (live streaming).
-    const strong: { entry: Entry; score: number }[] = []
-    const weak: { entry: Entry; score: number }[] = []
+    const out: IndexEntry[] = []
     let queue: string[] = [rootAbs]
     let visited = 0
-    const MAX_DIRS = 20000
-    const MAX_CANDIDATES = 5000
+    const MAX_DIRS = 40000
+    const MAX_ENTRIES = 200000
     const CONCURRENCY = 16 // directories read in parallel — overlaps I/O
 
-    // Build a full Entry for a match, statting it only now (the walk itself never
-    // stats — that's the speedup) for size/mtime.
-    const recordMatch = async (abs: string, name: string, isDir: boolean, score: number, isStrong: boolean) => {
-      let st
-      try {
-        st = await this.fs.stat(abs)
-      } catch {
-        return // vanished / broken symlink
-      }
-      const entry: Entry = {
-        name,
-        path: this.resolver.toRelative(abs),
-        type: isDir ? 'dir' : 'file',
-        size: isDir ? 0 : st.size,
-        modifiedAt: st.mtime.toISOString(),
-      }
-      if (isStrong) {
-        strong.push({ entry, score })
-        onMatch?.(entry, score) // stream substring hits as they're found
-      } else {
-        weak.push({ entry, score })
-      }
-    }
-
     const processDir = async (dir: string): Promise<string[]> => {
-      let entries
+      let listed
       try {
-        entries = await this.fs.listNames(dir) // no per-entry stat
+        listed = await this.fs.listNames(dir) // no per-entry stat — the win
       } catch {
         return [] // unreadable directory — skip it
       }
       const children: string[] = []
-      for (const e of entries) {
-        const relToRoot = e.abs.startsWith(prefix) ? e.abs.slice(prefix.length) : e.name
-        const m = scoreEntry(query, relToRoot, e.name)
-        if (m !== null) await recordMatch(e.abs, e.name, e.isDir, m.score, m.strong)
-        // Don't recurse into dotfolders or heavy/generated dirs.
+      for (const e of listed) {
+        out.push({ abs: e.abs, name: e.name, isDir: e.isDir, rel: e.abs.startsWith(prefix) ? e.abs.slice(prefix.length) : e.name })
+        // Index entries themselves, but don't descend into dotfolders or
+        // heavy/generated dirs.
         if (e.isDir && !e.name.startsWith('.') && !SEARCH_SKIP_DIRS.has(e.name)) children.push(e.abs)
       }
       return children
     }
 
-    // Parallel breadth-first walk: read up to CONCURRENCY directories at once.
-    while (queue.length && visited < MAX_DIRS && strong.length < limit && weak.length < MAX_CANDIDATES) {
+    while (queue.length && visited < MAX_DIRS && out.length < MAX_ENTRIES) {
       const batch = queue.splice(0, CONCURRENCY)
       visited += batch.length
       const nested = await Promise.all(batch.map(processDir))
       queue = queue.concat(...nested)
     }
+    return out
+  }
 
-    const chosen = strong.length ? strong : weak
-    chosen.sort((a, b) => b.score - a.score || byFolderThenName(a.entry, b.entry))
-    const result = chosen.slice(0, limit)
-    // No substring hits → emit the fuzzy fallback now that the walk is done.
-    if (onMatch && !strong.length) for (const s of result) onMatch(s.entry, s.score)
-    return result.map((s) => s.entry)
+  /** Score the (in-memory) index, then stat only the top `limit` results. */
+  private async matchIndex(
+    entries: IndexEntry[],
+    query: string,
+    onMatch: ((entry: Entry, score: number) => void) | undefined,
+    limit: number,
+  ): Promise<Entry[]> {
+    // Substring ("strong") matches win; scattered fuzzy ones are only the
+    // fallback when nothing matched as a substring. Scoring is pure in-memory.
+    const strong: { it: IndexEntry; score: number }[] = []
+    const weak: { it: IndexEntry; score: number }[] = []
+    for (const it of entries) {
+      const m = scoreEntry(query, it.rel, it.name)
+      if (m === null) continue
+      ;(m.strong ? strong : weak).push({ it, score: m.score })
+    }
+
+    const chosen = (strong.length ? strong : weak)
+      .sort((a, b) => b.score - a.score || byIndexFolderThenName(a.it, b.it))
+      .slice(0, limit)
+
+    // Stat only the handful of results (for size/mtime), streaming them in rank
+    // order as we go.
+    const results: Entry[] = []
+    for (const c of chosen) {
+      let st
+      try {
+        st = await this.fs.stat(c.it.abs)
+      } catch {
+        continue // vanished / broken symlink
+      }
+      const entry: Entry = {
+        name: c.it.name,
+        path: this.resolver.toRelative(c.it.abs),
+        type: c.it.isDir ? 'dir' : 'file',
+        size: c.it.isDir ? 0 : st.size,
+        modifiedAt: st.mtime.toISOString(),
+      }
+      results.push(entry)
+      onMatch?.(entry, c.score)
+    }
+    return results
   }
 
   async createFolder(relParent: string, name: string): Promise<Entry> {
@@ -168,6 +219,7 @@ export class ExplorerService {
     const abs = this.resolver.toAbsolute(path.posix.join(relParent || '', folderName))
     if (await this.fs.exists(abs)) throw new ValidationError('An item with that name already exists')
     await this.fs.mkdir(abs)
+    this.invalidateSearchIndex()
     return this.entryOf(abs)
   }
 
@@ -180,6 +232,7 @@ export class ExplorerService {
     this.resolver.toAbsolute(this.resolver.toRelative(target)) // re-validate confinement
     if (await this.fs.exists(target)) throw new ValidationError('An item with that name already exists')
     await this.fs.rename(abs, target)
+    this.invalidateSearchIndex()
     return this.entryOf(target)
   }
 
@@ -188,12 +241,14 @@ export class ExplorerService {
     if (abs === this.resolver.root) throw new ValidationError('Cannot delete the root')
     await this.statOrThrow(abs)
     await this.fs.remove(abs)
+    this.invalidateSearchIndex()
   }
 
   async upload(relParent: string, originalName: string, content: Buffer): Promise<Entry> {
     const name = assertValidName(originalName)
     const abs = this.resolver.toAbsolute(path.posix.join(relParent || '', name))
     await this.fs.writeFile(abs, content)
+    this.invalidateSearchIndex()
     return this.entryOf(abs)
   }
 
@@ -202,6 +257,7 @@ export class ExplorerService {
     const abs = this.resolver.toAbsolute(path.posix.join(relParent || '', fileName))
     if (await this.fs.exists(abs)) throw new ValidationError('An item with that name already exists')
     await this.fs.writeFile(abs, Buffer.alloc(0))
+    this.invalidateSearchIndex()
     return this.entryOf(abs)
   }
 
@@ -213,6 +269,7 @@ export class ExplorerService {
     const base = path.basename(abs, ext)
     const target = await this.uniquePath(path.dirname(abs), `${base} copy${ext}`)
     await this.fs.cp(abs, target)
+    this.invalidateSearchIndex()
     return this.entryOf(target)
   }
 
@@ -257,6 +314,7 @@ export class ExplorerService {
       }
       results.push(await this.entryOf(target))
     }
+    this.invalidateSearchIndex()
     return results
   }
 
@@ -328,5 +386,10 @@ export class ExplorerService {
 
 function byFolderThenName(a: Entry, b: Entry): number {
   if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+}
+
+function byIndexFolderThenName(a: IndexEntry, b: IndexEntry): number {
+  if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 }
