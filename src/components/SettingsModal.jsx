@@ -8,6 +8,7 @@ import {
   TextInput,
   ScrollArea,
   SegmentedControl,
+  Switch,
   ThemeIcon,
   ActionIcon,
   UnstyledButton,
@@ -89,6 +90,12 @@ function AppearanceControl() {
   )
 }
 
+function AutoplayVideoControl() {
+  const autoplayVideo = useSettingsStore((s) => s.autoplayVideo)
+  const setAutoplayVideo = useSettingsStore((s) => s.setAutoplayVideo)
+  return <Switch checked={autoplayVideo} onChange={(e) => setAutoplayVideo(e.currentTarget.checked)} />
+}
+
 function GeneralPanel() {
   return (
     <Stack gap={0}>
@@ -98,6 +105,9 @@ function GeneralPanel() {
       <Box>
         <Row label="Appearance">
           <AppearanceControl />
+        </Row>
+        <Row label="Autoplay video">
+          <AutoplayVideoControl />
         </Row>
       </Box>
     </Stack>

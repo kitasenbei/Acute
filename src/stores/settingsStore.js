@@ -15,6 +15,10 @@ export const useSettingsStore = create(
       appearance: 'auto',
       setAppearance: (appearance) => set({ appearance }),
 
+      // Start playing a video as soon as its preview opens.
+      autoplayVideo: false,
+      setAutoplayVideo: (autoplayVideo) => set({ autoplayVideo }),
+
       // Settings modal UI state
       isOpen: false,
       section: 'general',
@@ -24,7 +28,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'app-settings',
-      partialize: (state) => ({ appearance: state.appearance }),
+      partialize: (state) => ({ appearance: state.appearance, autoplayVideo: state.autoplayVideo }),
     },
   ),
 )

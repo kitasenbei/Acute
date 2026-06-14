@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
 import { usePlayerStore } from '../stores/playerStore.js'
+import { useSettingsStore } from '../stores/settingsStore.js'
 
 /**
  * Custom video player: the video fills a black stage (small clips scale up,
@@ -27,6 +28,7 @@ export function VideoPlayer({ src }) {
   const muted = usePlayerStore((s) => s.muted)
   const setVolume = usePlayerStore((s) => s.setVolume)
   const setMuted = usePlayerStore((s) => s.setMuted)
+  const autoplay = useSettingsStore((s) => s.autoplayVideo)
 
   // Reset transport state when the source changes.
   useEffect(() => {
@@ -102,7 +104,10 @@ export function VideoPlayer({ src }) {
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration)
+          if (autoplay) e.currentTarget.play().catch(() => {})
+        }}
         onEnded={() => setPlaying(false)}
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', cursor: 'pointer' }}
       />
