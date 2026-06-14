@@ -218,10 +218,11 @@ export function VideoPlayer({ src, path }) {
         {/* Sliding filmstrip window (aspect-preserving) centered on the playhead. */}
         {showStrip && (() => {
           const frameW = FILMSTRIP_H * (storyboard.tileW / storyboard.tileH)
-          const playheadX = (current / duration) * seekHover.w
-          const offset = playheadX - (current / storyboard.interval) * frameW
+          const centerX = seekHover.w / 2
+          // Slide the strip so the current frame sits under the fixed centre tick.
+          const offset = centerX - (current / storyboard.interval) * frameW
           return (
-            <Box style={{ position: 'relative', height: FILMSTRIP_H, marginBottom: 10, overflow: 'hidden' }}>
+            <Box style={{ position: 'relative', height: FILMSTRIP_H, marginBottom: 10, overflow: 'hidden', background: '#000' }}>
               <Box style={{ position: 'absolute', left: 0, top: 0, height: '100%', display: 'flex', transform: `translateX(${offset}px)`, willChange: 'transform' }}>
                 {Array.from({ length: storyboard.count }).map((_, i) => {
                   const col = i % storyboard.cols
@@ -244,8 +245,8 @@ export function VideoPlayer({ src, path }) {
                   )
                 })}
               </Box>
-              {/* Playhead marker over the strip. */}
-              <Box style={{ position: 'absolute', left: playheadX, top: 0, bottom: 0, width: 2, background: 'var(--mantine-primary-color-filled)', transform: 'translateX(-1px)' }} />
+              {/* Fixed centre tick — the strip slides beneath it. */}
+              <Box style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'var(--mantine-primary-color-filled)', transform: 'translateX(-1px)' }} />
             </Box>
           )
         })()}
@@ -267,7 +268,9 @@ export function VideoPlayer({ src, path }) {
             const idx = Math.min(storyboard.count - 1, Math.max(0, Math.floor(seekHover.time / storyboard.interval)))
             const tx = (idx % storyboard.cols) * storyboard.tileW
             const ty = Math.floor(idx / storyboard.cols) * storyboard.tileH
-            const left = Math.min(seekHover.w - storyboard.tileW / 2, Math.max(storyboard.tileW / 2, seekHover.x))
+            const left = showStrip
+              ? seekHover.w / 2
+              : Math.min(seekHover.w - storyboard.tileW / 2, Math.max(storyboard.tileW / 2, seekHover.x))
             return (
               <Box
                 style={{
