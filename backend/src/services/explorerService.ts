@@ -2,6 +2,7 @@ import path from 'node:path'
 import { NotFoundError, ValidationError } from '../errors.js'
 import { PathResolver, assertValidName } from '../fs/pathResolver.js'
 import { mimeFromName } from '../fs/mime.js'
+import { scoreEntry } from './fuzzy.js'
 import type { FileSystem } from '../fs/fileSystem.js'
 import type { DirListing, Entry } from '../types.js'
 
@@ -58,6 +59,61 @@ export class ExplorerService {
       parent: this.resolver.parentOf(this.resolver.toRelative(abs)),
       entries,
     }
+  }
+
+  /**
+   * Recursively fuzzy-find entries under `relDir`, fff-style: every entry's path
+   * (relative to the search root) is scored against the query as a subsequence
+   * with boundary/consecutive bonuses, and results are returned best-first.
+   *
+   * The walk is breadth-first and bounded (directory-visit cap + candidate cap)
+   * so a huge tree can't hang; `limit` caps the returned top matches.
+   */
+  async search(relDir = '', query: string, limit = 200): Promise<Entry[]> {
+    if (!query.trim()) return []
+    const rootAbs = this.resolver.toAbsolute(relDir)
+    const stat = await this.statOrThrow(rootAbs)
+    if (!stat.isDirectory()) throw new ValidationError('Not a directory')
+
+    const prefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep
+    const scored: { entry: Entry; score: number }[] = []
+    const queue: string[] = [rootAbs]
+    let visited = 0
+    const MAX_DIRS = 20000
+    const MAX_CANDIDATES = 5000
+
+    while (queue.length && visited < MAX_DIRS && scored.length < MAX_CANDIDATES) {
+      const dir = queue.shift() as string
+      visited++
+      let raw
+      try {
+        raw = await this.fs.list(dir)
+      } catch {
+        continue // unreadable directory — skip it
+      }
+      for (const e of raw) {
+        // Match against the path relative to the search root (not just the name),
+        // so a fuzzy query can span folders the way fff matches repo-relative paths.
+        const relToRoot = e.abs.startsWith(prefix) ? e.abs.slice(prefix.length) : e.name
+        const score = scoreEntry(query, relToRoot, e.name)
+        if (score !== null) {
+          scored.push({
+            score,
+            entry: {
+              name: e.name,
+              path: this.resolver.toRelative(e.abs),
+              type: e.isDir ? ('dir' as const) : ('file' as const),
+              size: e.size,
+              modifiedAt: e.modifiedAt,
+            },
+          })
+        }
+        if (e.isDir) queue.push(e.abs)
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score || byFolderThenName(a.entry, b.entry))
+    return scored.slice(0, limit).map((s) => s.entry)
   }
 
   async createFolder(relParent: string, name: string): Promise<Entry> {

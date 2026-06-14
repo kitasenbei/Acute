@@ -47,6 +47,11 @@ export class ExplorerController {
     res.json(await this.service.listDir(pathParam(req.query.path)))
   })
 
+  search = wrap(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q : ''
+    res.json({ entries: await this.service.search(pathParam(req.query.path), q) })
+  })
+
   usage = wrap(async (_req, res) => {
     res.json(await this.service.diskUsage())
   })

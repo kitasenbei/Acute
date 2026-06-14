@@ -31,6 +31,26 @@ describe('ExplorerService (business tier)', () => {
     expect(listing.entries.map((e) => e.name)).toEqual(['readme.md'])
   })
 
+  it('fuzzy-searches recursively (smart-case, subsequence)', async () => {
+    // "rdme" is a subsequence of "readme.md", found in a nested folder.
+    expect((await service.search('', 'rdme')).map((e) => e.path)).toContain('Docs/readme.md')
+    // Smart-case: an uppercase query is case-sensitive and won't match lowercase.
+    expect(await service.search('', 'README')).toEqual([])
+  })
+
+  it('searches within a subdirectory and returns an empty list for no match', async () => {
+    expect(await service.search('Docs', 'notes')).toEqual([])
+    expect(await service.search('', '')).toEqual([])
+  })
+
+  it('ranks an exact filename match above a fuzzy one', async () => {
+    await service.createFile('', 'report.txt')
+    await service.createFolder('', 'Reports')
+    await service.createFile('Reports', 'q1.txt')
+    const results = await service.search('', 'report')
+    expect(results[0].name).toBe('report.txt') // exact filename wins
+  })
+
   it('blocks path traversal outside the root', async () => {
     await expect(service.listDir('../..')).rejects.toBeInstanceOf(ValidationError)
   })

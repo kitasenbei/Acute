@@ -57,6 +57,39 @@ export const openapiSpec: JsonObject = {
         },
       },
     },
+    '/api/fs/search': {
+      get: {
+        tags: ['Explorer'],
+        summary: 'Recursively search for entries by name under a directory',
+        parameters: [
+          { $ref: '#/components/parameters/PathQuery' },
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Case-insensitive name substring',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Matching entries',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    entries: { type: 'array', items: { $ref: '#/components/schemas/Entry' } },
+                  },
+                },
+              },
+            },
+          },
+          400: { $ref: '#/components/responses/BadRequest' },
+          404: { $ref: '#/components/responses/NotFound' },
+        },
+      },
+    },
     '/api/fs/folder': {
       post: {
         tags: ['Explorer'],
