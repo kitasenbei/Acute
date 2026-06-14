@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Box, Group, Slider, ActionIcon, Text } from '@mantine/core'
+import { Box, Group, Slider, ActionIcon, Text, Tooltip } from '@mantine/core'
 import {
   IconPlayerPlayFilled,
   IconPlayerPauseFilled,
@@ -388,14 +388,15 @@ export function VideoPlayer({ src, path }) {
                   {formatTime(current)} / {formatTime(duration)}
                 </Text>
               </Group>
-              <ActionIcon
-                variant="transparent"
-                style={{ ...iconStyle, color: loop ? 'var(--mantine-color-blue-4)' : iconStyle.color }}
-                onClick={() => setLoop((v) => !v)}
-                title={loop ? 'Looping' : 'Loop'}
-              >
-                <IconRepeat size={18} />
-              </ActionIcon>
+              <Tooltip label={loop ? 'Looping' : 'Loop'} openDelay={300} withinPortal>
+                <ActionIcon
+                  variant="transparent"
+                  style={{ ...iconStyle, color: loop ? 'var(--mantine-color-blue-4)' : iconStyle.color }}
+                  onClick={() => setLoop((v) => !v)}
+                >
+                  <IconRepeat size={18} />
+                </ActionIcon>
+              </Tooltip>
               <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
                 {isFullscreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
               </ActionIcon>

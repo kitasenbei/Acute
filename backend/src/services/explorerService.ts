@@ -99,42 +99,60 @@ export class ExplorerService {
     // matches are emitted to `onMatch` as the walk finds them (live streaming).
     const strong: { entry: Entry; score: number }[] = []
     const weak: { entry: Entry; score: number }[] = []
-    const queue: string[] = [rootAbs]
+    let queue: string[] = [rootAbs]
     let visited = 0
     const MAX_DIRS = 20000
     const MAX_CANDIDATES = 5000
+    const CONCURRENCY = 16 // directories read in parallel — overlaps I/O
 
-    while (queue.length && visited < MAX_DIRS && strong.length < limit && weak.length < MAX_CANDIDATES) {
-      const dir = queue.shift() as string
-      visited++
-      let raw
+    // Build a full Entry for a match, statting it only now (the walk itself never
+    // stats — that's the speedup) for size/mtime.
+    const recordMatch = async (abs: string, name: string, isDir: boolean, score: number, isStrong: boolean) => {
+      let st
       try {
-        raw = await this.fs.list(dir)
+        st = await this.fs.stat(abs)
       } catch {
-        continue // unreadable directory — skip it
+        return // vanished / broken symlink
       }
-      for (const e of raw) {
+      const entry: Entry = {
+        name,
+        path: this.resolver.toRelative(abs),
+        type: isDir ? 'dir' : 'file',
+        size: isDir ? 0 : st.size,
+        modifiedAt: st.mtime.toISOString(),
+      }
+      if (isStrong) {
+        strong.push({ entry, score })
+        onMatch?.(entry, score) // stream substring hits as they're found
+      } else {
+        weak.push({ entry, score })
+      }
+    }
+
+    const processDir = async (dir: string): Promise<string[]> => {
+      let entries
+      try {
+        entries = await this.fs.listNames(dir) // no per-entry stat
+      } catch {
+        return [] // unreadable directory — skip it
+      }
+      const children: string[] = []
+      for (const e of entries) {
         const relToRoot = e.abs.startsWith(prefix) ? e.abs.slice(prefix.length) : e.name
         const m = scoreEntry(query, relToRoot, e.name)
-        if (m !== null) {
-          const entry: Entry = {
-            name: e.name,
-            path: this.resolver.toRelative(e.abs),
-            type: e.isDir ? ('dir' as const) : ('file' as const),
-            size: e.size,
-            modifiedAt: e.modifiedAt,
-          }
-          if (m.strong) {
-            strong.push({ entry, score: m.score })
-            onMatch?.(entry, m.score) // stream substring hits as they're found
-          } else {
-            weak.push({ entry, score: m.score })
-          }
-        }
-        // Don't recurse into dotfolders or heavy/generated dirs — they bury
-        // results and slow the walk.
-        if (e.isDir && !e.name.startsWith('.') && !SEARCH_SKIP_DIRS.has(e.name)) queue.push(e.abs)
+        if (m !== null) await recordMatch(e.abs, e.name, e.isDir, m.score, m.strong)
+        // Don't recurse into dotfolders or heavy/generated dirs.
+        if (e.isDir && !e.name.startsWith('.') && !SEARCH_SKIP_DIRS.has(e.name)) children.push(e.abs)
       }
+      return children
+    }
+
+    // Parallel breadth-first walk: read up to CONCURRENCY directories at once.
+    while (queue.length && visited < MAX_DIRS && strong.length < limit && weak.length < MAX_CANDIDATES) {
+      const batch = queue.splice(0, CONCURRENCY)
+      visited += batch.length
+      const nested = await Promise.all(batch.map(processDir))
+      queue = queue.concat(...nested)
     }
 
     const chosen = strong.length ? strong : weak

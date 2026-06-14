@@ -43,6 +43,16 @@ export class FileSystem {
     return fs.stat(abs)
   }
 
+  /**
+   * Like `list`, but only returns name + isDir using readdir's dirent types —
+   * no per-entry `stat`. Used by recursive search, which walks huge trees and
+   * only needs size/mtime for the handful of matches (statted separately).
+   */
+  async listNames(absDir: string): Promise<{ name: string; abs: string; isDir: boolean }[]> {
+    const dirents = await fs.readdir(absDir, { withFileTypes: true })
+    return dirents.map((d) => ({ name: d.name, abs: path.join(absDir, d.name), isDir: d.isDirectory() }))
+  }
+
   async mkdir(abs: string): Promise<void> {
     await fs.mkdir(abs)
   }
