@@ -150,8 +150,7 @@ export function VideoPlayer({ src, path }) {
   const iconStyle = { color: '#fff' }
   const pct = duration ? (current / duration) * 100 : 0
   // Filmstrip reel shown when the bar is pulled up for precise seeking.
-  const FILMSTRIP_H = 76
-  const STRIP_FRAMES = 14
+  const FILMSTRIP_H = 80
   const showStrip = !!(seekHover?.dragging && seekHover.precise && storyboard)
 
   return (
@@ -216,31 +215,40 @@ export function VideoPlayer({ src, path }) {
           pointerEvents: controlsVisible ? 'auto' : 'none',
         }}
       >
-        {/* Filmstrip reel (full width) while pulled up for precise seeking. */}
-        {showStrip && (
-          <Box style={{ display: 'flex', height: FILMSTRIP_H, marginLeft: -12, marginRight: -12, marginBottom: 10, overflow: 'hidden' }}>
-            {Array.from({ length: STRIP_FRAMES }).map((_, i) => {
-              const index = Math.round((i / (STRIP_FRAMES - 1)) * (storyboard.count - 1))
-              const col = index % storyboard.cols
-              const row = Math.floor(index / storyboard.cols)
-              const bx = storyboard.cols > 1 ? (col / (storyboard.cols - 1)) * 100 : 0
-              const by = storyboard.rows > 1 ? (row / (storyboard.rows - 1)) * 100 : 0
-              return (
-                <Box
-                  key={i}
-                  style={{
-                    flex: 1,
-                    height: '100%',
-                    backgroundImage: `url(${storyboard.url})`,
-                    backgroundSize: `${storyboard.cols * 100}% ${storyboard.rows * 100}%`,
-                    backgroundPosition: `${bx}% ${by}%`,
-                    borderRight: '1px solid rgba(0,0,0,0.35)',
-                  }}
-                />
-              )
-            })}
-          </Box>
-        )}
+        {/* Sliding filmstrip window (aspect-preserving) centered on the playhead. */}
+        {showStrip && (() => {
+          const frameW = FILMSTRIP_H * (storyboard.tileW / storyboard.tileH)
+          const playheadX = (current / duration) * seekHover.w
+          const offset = playheadX - (current / storyboard.interval) * frameW
+          return (
+            <Box style={{ position: 'relative', height: FILMSTRIP_H, marginBottom: 10, overflow: 'hidden' }}>
+              <Box style={{ position: 'absolute', left: 0, top: 0, height: '100%', display: 'flex', transform: `translateX(${offset}px)`, willChange: 'transform' }}>
+                {Array.from({ length: storyboard.count }).map((_, i) => {
+                  const col = i % storyboard.cols
+                  const row = Math.floor(i / storyboard.cols)
+                  const bx = storyboard.cols > 1 ? (col / (storyboard.cols - 1)) * 100 : 0
+                  const by = storyboard.rows > 1 ? (row / (storyboard.rows - 1)) * 100 : 0
+                  return (
+                    <Box
+                      key={i}
+                      style={{
+                        width: frameW,
+                        height: '100%',
+                        flexShrink: 0,
+                        backgroundImage: `url(${storyboard.url})`,
+                        backgroundSize: `${storyboard.cols * 100}% ${storyboard.rows * 100}%`,
+                        backgroundPosition: `${bx}% ${by}%`,
+                        borderRight: '1px solid rgba(0,0,0,0.4)',
+                      }}
+                    />
+                  )
+                })}
+              </Box>
+              {/* Playhead marker over the strip. */}
+              <Box style={{ position: 'absolute', left: playheadX, top: 0, bottom: 0, width: 2, background: 'var(--mantine-primary-color-filled)', transform: 'translateX(-1px)' }} />
+            </Box>
+          )
+        })()}
         <Box
           ref={seekRef}
           mb={6}
