@@ -659,10 +659,16 @@ export default function App() {
       // Convert image to another format (writes a new file alongside).
       if (fileKind(entry) === 'image') {
         const cur = entry.name.split('.').pop()?.toLowerCase()
-        items.push({ divider: true })
-        for (const { fmt, label } of IMAGE_FORMATS) {
-          if (fmt === cur || (fmt === 'jpg' && cur === 'jpeg')) continue
-          items.push({ label: `Convert to ${label}`, icon: IconPhoto, onClick: () => run(() => api.convert(entry.path, fmt)) })
+        const submenu = IMAGE_FORMATS.filter(
+          ({ fmt }) => !(fmt === cur || (fmt === 'jpg' && cur === 'jpeg')),
+        ).map(({ fmt, label }) => ({
+          label,
+          icon: IconPhoto,
+          onClick: () => run(() => api.convert(entry.path, fmt)),
+        }))
+        if (submenu.length) {
+          items.push({ divider: true })
+          items.push({ label: 'Convert to', icon: IconPhoto, submenu })
         }
       }
 

@@ -1,11 +1,65 @@
 import { Menu, ColorSwatch } from '@mantine/core'
-import { IconCheck } from '@tabler/icons-react'
+import { IconCheck, IconChevronRight } from '@tabler/icons-react'
 import { useContextMenuStore } from '../stores/contextMenuStore.js'
+
+function leftSectionFor(item) {
+  if (item.dot) return <ColorSwatch color={item.dot} size={12} />
+  const Icon = item.icon
+  return Icon ? <Icon size={16} /> : null
+}
+
+/** Render a list of menu items, recursing into nested submenus. */
+function renderItems(items, close) {
+  return items.map((item, i) => {
+    if (item.divider) return <Menu.Divider key={`divider-${i}`} />
+
+    // A submenu opens to the side on hover.
+    if (item.submenu) {
+      return (
+        <Menu
+          key={item.label}
+          trigger="hover"
+          position="right-start"
+          offset={2}
+          shadow="md"
+          width={180}
+          withinPortal
+          closeOnItemClick={false}
+        >
+          <Menu.Target>
+            <Menu.Item
+              leftSection={leftSectionFor(item)}
+              rightSection={<IconChevronRight size={14} />}
+              closeMenuOnClick={false}
+            >
+              {item.label}
+            </Menu.Item>
+          </Menu.Target>
+          <Menu.Dropdown>{renderItems(item.submenu, close)}</Menu.Dropdown>
+        </Menu>
+      )
+    }
+
+    return (
+      <Menu.Item
+        key={item.label}
+        color={item.color}
+        leftSection={leftSectionFor(item)}
+        rightSection={item.checked ? <IconCheck size={14} /> : null}
+        onClick={() => {
+          close()
+          item.onClick?.()
+        }}
+      >
+        {item.label}
+      </Menu.Item>
+    )
+  })
+}
 
 /**
  * Renders the shared context menu at the stored cursor position. Anchors a
- * Mantine Menu to an invisible zero-size target placed at (x, y), so we get
- * Mantine's positioning + click-outside handling for free.
+ * Mantine Menu to an invisible zero-size target placed at (x, y).
  */
 export function ContextMenu() {
   const opened = useContextMenuStore((s) => s.opened)
@@ -19,31 +73,7 @@ export function ContextMenu() {
       <Menu.Target>
         <div style={{ position: 'fixed', left: x, top: y, width: 0, height: 0 }} />
       </Menu.Target>
-      <Menu.Dropdown style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-        {items.map((item, i) => {
-          if (item.divider) return <Menu.Divider key={`divider-${i}`} />
-          const Icon = item.icon
-          const leftSection = item.dot ? (
-            <ColorSwatch color={item.dot} size={12} />
-          ) : Icon ? (
-            <Icon size={16} />
-          ) : null
-          return (
-            <Menu.Item
-              key={item.label}
-              color={item.color}
-              leftSection={leftSection}
-              rightSection={item.checked ? <IconCheck size={14} /> : null}
-              onClick={() => {
-                close()
-                item.onClick?.()
-              }}
-            >
-              {item.label}
-            </Menu.Item>
-          )
-        })}
-      </Menu.Dropdown>
+      <Menu.Dropdown style={{ maxHeight: '70vh', overflowY: 'auto' }}>{renderItems(items, close)}</Menu.Dropdown>
     </Menu>
   )
 }
