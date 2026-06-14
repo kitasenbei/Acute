@@ -81,13 +81,21 @@ const SORTS = [
   { value: 'size', label: 'Size' },
 ]
 
-// Image formats offered in the right-click "Convert to" actions.
-const IMAGE_FORMATS = [
-  { fmt: 'png', label: 'PNG' },
-  { fmt: 'jpg', label: 'JPG' },
-  { fmt: 'webp', label: 'WebP' },
-  { fmt: 'avif', label: 'AVIF' },
-]
+// Formats offered in the right-click "Convert to" submenu, by file kind.
+const CONVERT_FORMATS = {
+  image: [
+    { fmt: 'png', label: 'PNG' },
+    { fmt: 'jpg', label: 'JPG' },
+    { fmt: 'webp', label: 'WebP' },
+    { fmt: 'avif', label: 'AVIF' },
+  ],
+  video: [
+    { fmt: 'mp4', label: 'MP4' },
+    { fmt: 'webm', label: 'WebM' },
+    { fmt: 'mkv', label: 'MKV' },
+    { fmt: 'mov', label: 'MOV' },
+  ],
+}
 
 // Sort entries with folders always first, then by the chosen field/direction.
 function compareEntries(a, b, field, dir) {
@@ -656,16 +664,17 @@ export default function App() {
       }
       items.push({ label: 'Rename', icon: IconPencil, onClick: () => setEditingPath(entry.path) })
 
-      // Convert image to another format (writes a new file alongside).
-      if (fileKind(entry) === 'image') {
+      // Convert image/video to another format (writes a new file alongside).
+      const convertFmts = CONVERT_FORMATS[fileKind(entry)]
+      if (convertFmts) {
         const cur = entry.name.split('.').pop()?.toLowerCase()
-        const submenu = IMAGE_FORMATS.filter(
-          ({ fmt }) => !(fmt === cur || (fmt === 'jpg' && cur === 'jpeg')),
-        ).map(({ fmt, label }) => ({
-          label,
-          icon: IconPhoto,
-          onClick: () => run(() => api.convert(entry.path, fmt)),
-        }))
+        const submenu = convertFmts
+          .filter(({ fmt }) => !(fmt === cur || (fmt === 'jpg' && cur === 'jpeg')))
+          .map(({ fmt, label }) => ({
+            label,
+            icon: IconPhoto,
+            onClick: () => run(() => api.convert(entry.path, fmt)),
+          }))
         if (submenu.length) {
           items.push({ divider: true })
           items.push({ label: 'Convert to', icon: IconPhoto, submenu })

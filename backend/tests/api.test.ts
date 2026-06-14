@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { spawn } from 'node:child_process'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import request from 'supertest'
 import sharp from 'sharp'
@@ -102,10 +103,23 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
     expect(out.format).toBe('jpeg')
   })
 
-  it('rejects converting a non-image', async () => {
+  it('rejects converting an unsupported type', async () => {
     const res = await request(app).post('/api/fs/convert').send({ path: 'notes.txt', format: 'png' })
     expect(res.status).toBe(400)
   })
+
+  it('converts a video to another container', async () => {
+    const src = path.join(stack.rootDir, 'clip.mp4')
+    await new Promise<void>((resolve, reject) => {
+      const ff = spawn('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=d=1:s=32x32:r=10', src], { stdio: 'ignore' })
+      ff.on('error', reject)
+      ff.on('close', (c) => (c === 0 ? resolve() : reject(new Error('ffmpeg gen failed'))))
+    })
+
+    const res = await request(app).post('/api/fs/convert').send({ path: 'clip.mp4', format: 'mkv' })
+    expect(res.status).toBe(201)
+    expect(res.body.name).toBe('clip.mkv')
+  }, 20000)
 
   it('rejects traversal with 400', async () => {
     const res = await request(app).get('/api/fs').query({ path: '../../etc' })

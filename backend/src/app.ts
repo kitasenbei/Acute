@@ -13,7 +13,7 @@ import { FavoritesService } from './services/favoritesService.js'
 import { TagService } from './services/tagService.js'
 import { ThumbnailService } from './services/thumbnailService.js'
 import { StoryboardService } from './services/storyboardService.js'
-import { ImageService } from './services/imageService.js'
+import { ConvertService } from './services/convertService.js'
 import { ExplorerController } from './controllers/explorerController.js'
 import { FavoritesController } from './controllers/favoritesController.js'
 import { TagsController } from './controllers/tagsController.js'
@@ -45,9 +45,9 @@ export function createApp({ db, rootDir, cacheDir }: AppDeps): Express {
   const tagService = new TagService({ repository: tagsRepo })
   const thumbnailService = new ThumbnailService({ rootDir, cacheDir: thumbDir })
   const storyboardService = new StoryboardService({ rootDir, cacheDir: thumbDir })
-  const imageService = new ImageService({ rootDir })
+  const convertService = new ConvertService({ rootDir })
   // Presentation tier
-  const explorerController = new ExplorerController(explorerService, thumbnailService, storyboardService, imageService)
+  const explorerController = new ExplorerController(explorerService, thumbnailService, storyboardService, convertService)
   const favoritesController = new FavoritesController(favoritesService)
   const tagsController = new TagsController(tagService, explorerService)
 
