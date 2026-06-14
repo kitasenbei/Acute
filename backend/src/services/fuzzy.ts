@@ -71,28 +71,22 @@ export function fuzzyScore(query: string, text: string): number | null {
  * filename wins outright, and shorter paths break ties.
  */
 export function scoreEntry(query: string, relPath: string, name: string): number | null {
-  const parts = query.trim().split(/\s+/).filter(Boolean)
+  const q = query.trim()
+  const parts = q.split(/\s+/).filter(Boolean)
   if (!parts.length) return null
+
+  // A plain query matches just the *name* — the recursive walk already finds
+  // nested entries, so matching the full path would drag in a whole folder's
+  // subtree merely because an ancestor folder's name matched. Only when the
+  // query looks path-like (contains a slash) do we match the relative path.
+  const target = q.includes('/') ? relPath : name
 
   let score = 0
   for (const part of parts) {
-    const s = fuzzyScore(part, relPath)
+    const s = fuzzyScore(part, target)
     if (s === null) return null // a required part didn't match → drop the entry
     score += s
   }
-
-  // Emphasis on matches that fall within the filename itself.
-  let nameScore = 0
-  let nameMatchesAll = true
-  for (const part of parts) {
-    const s = fuzzyScore(part, name)
-    if (s === null) {
-      nameMatchesAll = false
-      break
-    }
-    nameScore += s
-  }
-  if (nameMatchesAll) score += Math.round(nameScore * 0.6)
 
   // An exact filename match is the strongest possible signal — comparing both
   // the full name and the name without its extension (so "report" tops "report.txt").
