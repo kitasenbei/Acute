@@ -140,9 +140,9 @@ export function PreviewModal() {
   const prev = usePreviewStore((s) => s.prev)
   const nav = { onPrev: prev, onNext: next, hasPrev: index > 0, hasNext: index < playlist.length - 1 }
 
-  // Blend the header into the video's black letterbox bands.
-  const videoMode = entry ? fileKind(entry) === 'video' : false
-  const iconColor = videoMode ? 'gray.3' : 'gray'
+  // Image and video previews sit on black (header + body), so they blend.
+  const dark = entry ? ['image', 'video'].includes(fileKind(entry)) : false
+  const iconColor = dark ? 'gray.3' : 'gray'
 
   return (
     <Modal
@@ -166,11 +166,11 @@ export function PreviewModal() {
             h={52}
             style={{
               flexShrink: 0,
-              background: videoMode ? '#000' : undefined,
-              borderBottom: videoMode ? '1px solid #000' : '1px solid var(--mantine-color-default-border)',
+              background: dark ? '#000' : undefined,
+              borderBottom: dark ? '1px solid #000' : '1px solid var(--mantine-color-default-border)',
             }}
           >
-            <Text size="sm" fw={600} truncate c={videoMode ? 'gray.3' : undefined}>
+            <Text size="sm" fw={600} truncate c={dark ? 'gray.3' : undefined}>
               {entry.name}
             </Text>
             <Group gap={4} wrap="nowrap">
@@ -211,7 +211,7 @@ export function PreviewModal() {
           {/* Body: optional details panel on the left, content on the right. */}
           <Flex style={{ flex: 1, minHeight: 0 }}>
             {showDetails && <FileDetails files={[entry]} />}
-            <Box style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+            <Box style={{ flex: 1, minWidth: 0, overflow: 'auto', background: dark ? '#000' : undefined }}>
               <PreviewBody entry={entry} nav={nav} />
             </Box>
           </Flex>
