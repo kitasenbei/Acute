@@ -89,6 +89,26 @@ import {
 // fans out a "deck" of up to 4 cards, the last one an "N+" overflow when there
 // are more items than cards. Returned element is appended/snapshotted/removed.
 function buildDragGhost(paths) {
+  // Reuse the already-decoded thumbnail/icon <img> from each visible row so the
+  // cards show real previews (cloning avoids waiting on an async image load,
+  // which the synchronous setDragImage snapshot wouldn't capture).
+  const imgByPath = new Map()
+  for (const node of document.querySelectorAll('[data-path]')) {
+    const img = node.querySelector('img')
+    if (img) imgByPath.set(node.dataset.path, img)
+  }
+  const fillCard = (el, path) => {
+    const img = imgByPath.get(path)
+    if (img) {
+      const clone = img.cloneNode(true)
+      Object.assign(clone.style, { width: '100%', height: '100%', objectFit: 'cover' })
+      el.appendChild(clone)
+    } else {
+      const ext = path.includes('.') ? path.slice(path.lastIndexOf('.') + 1).toUpperCase() : ''
+      el.textContent = ext.slice(0, 4)
+      el.style.color = 'var(--mantine-color-dimmed)'
+    }
+  }
   const card = (extra) => {
     const el = document.createElement('div')
     Object.assign(el.style, {
@@ -96,10 +116,11 @@ function buildDragGhost(paths) {
       width: '56px',
       height: '40px',
       borderRadius: '7px',
+      overflow: 'hidden',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      font: '700 13px var(--mantine-font-family)',
+      font: '700 11px var(--mantine-font-family)',
       boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
       ...extra,
     })
@@ -110,18 +131,13 @@ function buildDragGhost(paths) {
   Object.assign(wrap.style, { position: 'fixed', top: '-1000px', left: '-1000px', pointerEvents: 'none' })
 
   if (paths.length === 1) {
-    const badge = card({
+    const c = card({
       position: 'static',
-      width: 'auto',
-      height: 'auto',
-      padding: '6px 12px',
-      borderRadius: '8px',
-      background: 'var(--mantine-primary-color-filled)',
-      color: 'var(--mantine-color-white)',
-      whiteSpace: 'nowrap',
+      background: 'var(--mantine-color-body, #fff)',
+      border: '1px solid var(--mantine-color-default-border)',
     })
-    badge.textContent = paths[0].split('/').pop() ?? 'item'
-    wrap.appendChild(badge)
+    fillCard(c, paths[0])
+    wrap.appendChild(c)
     return wrap
   }
 
@@ -143,6 +159,7 @@ function buildDragGhost(paths) {
       border: isOverflow ? 'none' : '1px solid var(--mantine-color-default-border)',
     })
     if (isOverflow) c.textContent = `${n - plain}+`
+    else fillCard(c, paths[i])
     wrap.appendChild(c)
   }
   return wrap
