@@ -590,7 +590,14 @@ export default function App() {
 
     // Clipboard ops (work on the whole target set).
     items.push({ label: many ? `Cut ${targets.length} items` : 'Cut', icon: IconScissors, onClick: () => setClipboard(targets, 'cut') })
-    items.push({ label: many ? `Copy ${targets.length} items` : 'Copy', icon: IconCopy, onClick: () => setClipboard(targets, 'copy') })
+    items.push({
+      label: many ? `Copy ${targets.length} items` : 'Copy',
+      icon: IconCopy,
+      onClick: () => {
+        setClipboard(targets, 'copy') // in-app paste
+        window.native?.copyToClipboard?.(targets) // OS clipboard (image bitmap / paths)
+      },
+    })
     // Paste into the right-clicked folder, or otherwise the current directory —
     // so Paste is reachable even when right-clicking a file or empty space.
     if (clipItems.length && !activeTagId) {

@@ -15,4 +15,6 @@ contextBridge.exposeInMainWorld('native', {
   resolvePath: (relPath) => ipcRenderer.invoke('native:resolvePath', relPath),
   // The OS file-type icon as a PNG data URL (null if unavailable).
   fileIcon: (relPath) => ipcRenderer.invoke('native:fileIcon', relPath),
+  // Copy file(s) to the OS clipboard (image bitmap when possible, else paths).
+  copyToClipboard: (relPaths) => ipcRenderer.invoke('native:copyToClipboard', relPaths),
 })

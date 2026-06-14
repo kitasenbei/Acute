@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, clipboard, nativeImage } = require('electron')
 const path = require('path')
 const os = require('os')
 const fs = require('fs')
@@ -122,6 +122,21 @@ ipcMain.handle('native:showInFolder', (_e, relPath) => {
 })
 // Resolve a root-relative path to its absolute on-disk path (for "Copy path").
 ipcMain.handle('native:resolvePath', (_e, relPath) => resolveInRoot(relPath))
+// Copy to the OS clipboard: a single image goes on as a bitmap (so chat apps can
+// paste it); otherwise the file path(s) go on as text. Returns what was written.
+ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {
+  const files = (Array.isArray(relPaths) ? relPaths : []).map(resolveInRoot).filter(Boolean)
+  if (!files.length) return null
+  if (files.length === 1 && /\.(png|jpe?g|gif|bmp)$/i.test(files[0])) {
+    const img = nativeImage.createFromPath(files[0])
+    if (!img.isEmpty()) {
+      clipboard.writeImage(img)
+      return 'image'
+    }
+  }
+  clipboard.writeText(files.join('\n'))
+  return 'text'
+})
 // The OS's native file-type icon as a PNG data URL (for the "System" icon theme).
 ipcMain.handle('native:fileIcon', async (_e, relPath) => {
   const abs = resolveInRoot(relPath)
