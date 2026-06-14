@@ -375,8 +375,9 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Recursive search: debounce the query, then fetch matches under the current
-  // directory. An empty query turns search off (falls back to the listing).
+  // Recursive search: debounce the query, then stream matches under the current
+  // directory, rendering them as the backend's walk finds them. An empty query
+  // turns search off (falls back to the listing).
   useEffect(() => {
     const q = search.trim()
     if (!q) {
@@ -384,19 +385,35 @@ export default function App() {
       return
     }
     let cancelled = false
-    const id = setTimeout(async () => {
-      try {
-        const { entries } = await api.search(path, q)
-        if (!cancelled) setSearchResults(entries)
-      } catch (e) {
-        if (!cancelled) {
-          setError(e.message)
-          setSearchResults([])
-        }
-      }
+    const ctrl = new AbortController()
+    const acc = []
+    const id = setTimeout(() => {
+      api
+        .search(
+          path,
+          q,
+          (batch) => {
+            if (cancelled) return
+            acc.push(...batch)
+            // Best-first, folders before files on ties.
+            acc.sort((a, b) => b.score - a.score || (a.type === b.type ? 0 : a.type === 'dir' ? -1 : 1))
+            setSearchResults(acc.slice())
+          },
+          ctrl.signal,
+        )
+        .then(() => {
+          if (!cancelled && acc.length === 0) setSearchResults([]) // finished with no matches
+        })
+        .catch((e) => {
+          if (!cancelled && e.name !== 'AbortError') {
+            setError(e.message)
+            setSearchResults([])
+          }
+        })
     }, 300)
     return () => {
       cancelled = true
+      ctrl.abort()
       clearTimeout(id)
     }
   }, [search, path])

@@ -49,7 +49,13 @@ export class ExplorerController {
 
   search = wrap(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q : ''
-    res.json({ entries: await this.service.search(pathParam(req.query.path), q) })
+    // Stream matches as newline-delimited JSON so the renderer can render them
+    // as the recursive walk finds them, rather than waiting for it to finish.
+    res.setHeader('Content-Type', 'application/x-ndjson')
+    await this.service.search(pathParam(req.query.path), q, (entry, score) => {
+      res.write(JSON.stringify({ ...entry, score }) + '\n')
+    })
+    res.end()
   })
 
   usage = wrap(async (_req, res) => {

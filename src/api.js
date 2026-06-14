@@ -33,9 +33,28 @@ export const api = {
     return fetch(`${BASE}/api/fs/usage`).then(json)
   },
 
-  // Recursively search for entries by name under `path`. Returns { entries }.
-  search(path = '', query = '') {
-    return fetch(`${BASE}/api/fs/search${q(path)}&q=${encodeURIComponent(query)}`).then(json)
+  // Recursively search under `path`, streaming matches (newline-delimited JSON)
+  // to `onBatch(entries)` as the backend's walk finds them. Returns a promise
+  // that resolves when the stream ends. Pass an AbortSignal to cancel.
+  async search(path = '', query = '', onBatch, signal) {
+    const res = await fetch(`${BASE}/api/fs/search${q(path)}&q=${encodeURIComponent(query)}`, { signal })
+    if (!res.ok || !res.body) throw new Error(`Request failed (${res.status})`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    const flush = (chunk) => {
+      buf += chunk
+      const lines = buf.split('\n')
+      buf = lines.pop() // keep the trailing partial line
+      const entries = lines.filter(Boolean).map((l) => JSON.parse(l))
+      if (entries.length) onBatch?.(entries)
+    }
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      flush(decoder.decode(value, { stream: true }))
+    }
+    if (buf.trim()) onBatch?.([JSON.parse(buf)])
   },
 
   createFolder(path, name) {

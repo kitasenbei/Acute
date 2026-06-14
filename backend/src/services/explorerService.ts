@@ -69,7 +69,12 @@ export class ExplorerService {
    * The walk is breadth-first and bounded (directory-visit cap + candidate cap)
    * so a huge tree can't hang; `limit` caps the returned top matches.
    */
-  async search(relDir = '', query: string, limit = 200): Promise<Entry[]> {
+  async search(
+    relDir = '',
+    query: string,
+    onMatch?: (entry: Entry, score: number) => void,
+    limit = 200,
+  ): Promise<Entry[]> {
     if (!query.trim()) return []
     const rootAbs = this.resolver.toAbsolute(relDir)
     const stat = await this.statOrThrow(rootAbs)
@@ -77,7 +82,8 @@ export class ExplorerService {
 
     const prefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep
     // Substring ("strong") matches are kept separate from scattered fuzzy ones;
-    // we only fall back to fuzzy when nothing matched as a substring.
+    // we only fall back to fuzzy when nothing matched as a substring. Strong
+    // matches are emitted to `onMatch` as the walk finds them (live streaming).
     const strong: { entry: Entry; score: number }[] = []
     const weak: { entry: Entry; score: number }[] = []
     const queue: string[] = [rootAbs]
@@ -85,7 +91,7 @@ export class ExplorerService {
     const MAX_DIRS = 20000
     const MAX_CANDIDATES = 5000
 
-    while (queue.length && visited < MAX_DIRS && strong.length + weak.length < MAX_CANDIDATES) {
+    while (queue.length && visited < MAX_DIRS && strong.length < limit && weak.length < MAX_CANDIDATES) {
       const dir = queue.shift() as string
       visited++
       let raw
@@ -105,7 +111,12 @@ export class ExplorerService {
             size: e.size,
             modifiedAt: e.modifiedAt,
           }
-          ;(m.strong ? strong : weak).push({ entry, score: m.score })
+          if (m.strong) {
+            strong.push({ entry, score: m.score })
+            onMatch?.(entry, m.score) // stream substring hits as they're found
+          } else {
+            weak.push({ entry, score: m.score })
+          }
         }
         if (e.isDir) queue.push(e.abs)
       }
@@ -113,7 +124,10 @@ export class ExplorerService {
 
     const chosen = strong.length ? strong : weak
     chosen.sort((a, b) => b.score - a.score || byFolderThenName(a.entry, b.entry))
-    return chosen.slice(0, limit).map((s) => s.entry)
+    const result = chosen.slice(0, limit)
+    // No substring hits → emit the fuzzy fallback now that the walk is done.
+    if (onMatch && !strong.length) for (const s of result) onMatch(s.entry, s.score)
+    return result.map((s) => s.entry)
   }
 
   async createFolder(relParent: string, name: string): Promise<Entry> {
