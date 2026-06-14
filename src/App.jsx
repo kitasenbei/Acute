@@ -85,6 +85,69 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
+// Builds the custom drag image: a single file shows a name badge; a multi-move
+// fans out a "deck" of up to 4 cards, the last one an "N+" overflow when there
+// are more items than cards. Returned element is appended/snapshotted/removed.
+function buildDragGhost(paths) {
+  const card = (extra) => {
+    const el = document.createElement('div')
+    Object.assign(el.style, {
+      position: 'absolute',
+      width: '56px',
+      height: '40px',
+      borderRadius: '7px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      font: '700 13px var(--mantine-font-family)',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
+      ...extra,
+    })
+    return el
+  }
+
+  const wrap = document.createElement('div')
+  Object.assign(wrap.style, { position: 'fixed', top: '-1000px', left: '-1000px', pointerEvents: 'none' })
+
+  if (paths.length === 1) {
+    const badge = card({
+      position: 'static',
+      width: 'auto',
+      height: 'auto',
+      padding: '6px 12px',
+      borderRadius: '8px',
+      background: 'var(--mantine-primary-color-filled)',
+      color: 'var(--mantine-color-white)',
+      whiteSpace: 'nowrap',
+    })
+    badge.textContent = paths[0].split('/').pop() ?? 'item'
+    wrap.appendChild(badge)
+    return wrap
+  }
+
+  // Deck: up to 4 cards. If there are more, the front card is an overflow count.
+  const n = paths.length
+  const overflow = n > 4
+  const plain = overflow ? 3 : n
+  const total = plain + (overflow ? 1 : 0)
+  Object.assign(wrap.style, { width: `${56 + (total - 1) * 7}px`, height: `${40 + (total - 1) * 7}px` })
+
+  for (let i = 0; i < total; i++) {
+    const front = i === total - 1
+    const isOverflow = overflow && front
+    const c = card({
+      left: `${i * 7}px`,
+      top: `${i * 7}px`,
+      background: isOverflow ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-body, #fff)',
+      color: isOverflow ? 'var(--mantine-color-white)' : 'var(--mantine-color-text)',
+      border: isOverflow ? 'none' : '1px solid var(--mantine-color-default-border)',
+    })
+    if (isOverflow) c.textContent = `${n - plain}+`
+    wrap.appendChild(c)
+  }
+  return wrap
+}
+
 export default function App() {
   const [path, setPath] = useState('')
   const [listing, setListing] = useState(null)
@@ -764,25 +827,11 @@ export default function App() {
       e.dataTransfer.setData('text/plain', paths.join('\n'))
 
       // Replace the default ghost (a screenshot of the hovered row, hover buttons
-      // and all) with a clean badge showing what's being moved.
-      const ghost = document.createElement('div')
-      ghost.textContent = paths.length > 1 ? `${paths.length} items` : (paths[0].split('/').pop() ?? 'item')
-      Object.assign(ghost.style, {
-        position: 'fixed',
-        top: '-1000px',
-        left: '-1000px',
-        padding: '6px 12px',
-        borderRadius: '8px',
-        background: 'var(--mantine-primary-color-filled)',
-        color: 'var(--mantine-color-white)',
-        font: '600 13px var(--mantine-font-family)',
-        boxShadow: '0 6px 18px rgba(0,0,0,0.3)',
-        whiteSpace: 'nowrap',
-        pointerEvents: 'none',
-        zIndex: '9999',
-      })
+      // and all) with a tidy "deck of cards": a single file shows its name; a
+      // multi-move fans out up to 4 cards, the last an overflow count when needed.
+      const ghost = buildDragGhost(paths)
       document.body.appendChild(ghost)
-      e.dataTransfer.setDragImage(ghost, 12, 12)
+      e.dataTransfer.setDragImage(ghost, 14, 14)
       setTimeout(() => ghost.remove(), 0)
     },
     [selected, onSelectMove, onSelectUp],
