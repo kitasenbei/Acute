@@ -85,82 +85,65 @@ import {
   compareEntries,
 } from './explorerConfig.js'
 
-// Builds the custom drag image: a single file shows a name badge; a multi-move
-// fans out a "deck" of up to 4 cards, the last one an "N+" overflow when there
-// are more items than cards. Returned element is appended/snapshotted/removed.
+// Builds the custom drag image: transparent, real-component-sized outlines that
+// fan out and overlap like scattered cards (up to 4), with a small "N+" badge
+// when more are being moved. Sized from the grabbed row's actual rect.
 function buildDragGhost(paths) {
-  // Reuse the already-decoded thumbnail/icon <img> from each visible row so the
-  // cards show real previews (cloning avoids waiting on an async image load,
-  // which the synchronous setDragImage snapshot wouldn't capture).
-  const imgByPath = new Map()
+  const rectByPath = new Map()
   for (const node of document.querySelectorAll('[data-path]')) {
-    const img = node.querySelector('img')
-    if (img) imgByPath.set(node.dataset.path, img)
+    rectByPath.set(node.dataset.path, node.getBoundingClientRect())
   }
-  const fillCard = (el, path) => {
-    const img = imgByPath.get(path)
-    if (img) {
-      const clone = img.cloneNode(true)
-      Object.assign(clone.style, { width: '100%', height: '100%', objectFit: 'cover' })
-      el.appendChild(clone)
-    } else {
-      const ext = path.includes('.') ? path.slice(path.lastIndexOf('.') + 1).toUpperCase() : ''
-      el.textContent = ext.slice(0, 4)
-      el.style.color = 'var(--mantine-color-dimmed)'
-    }
-  }
-  const card = (extra) => {
-    const el = document.createElement('div')
-    Object.assign(el.style, {
-      position: 'absolute',
-      width: '56px',
-      height: '40px',
-      borderRadius: '7px',
-      overflow: 'hidden',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      font: '700 11px var(--mantine-font-family)',
-      boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
-      ...extra,
-    })
-    return el
-  }
+  const ref = paths.map((p) => rectByPath.get(p)).find(Boolean)
+  const w = Math.round(ref?.width || 96)
+  const h = Math.round(ref?.height || 96)
+
+  const n = paths.length
+  const count = Math.min(n, 4)
+  const angles = [-7, 5, -4, 8]
+  const step = 12
+  const pad = 28 // room for rotation + the overflow badge
 
   const wrap = document.createElement('div')
-  Object.assign(wrap.style, { position: 'fixed', top: '-1000px', left: '-1000px', pointerEvents: 'none' })
+  Object.assign(wrap.style, {
+    position: 'fixed',
+    top: '-2000px',
+    left: '-2000px',
+    pointerEvents: 'none',
+    width: `${w + step * (count - 1) + pad * 2}px`,
+    height: `${h + step * (count - 1) + pad * 2}px`,
+  })
 
-  if (paths.length === 1) {
-    const c = card({
-      position: 'static',
-      background: 'var(--mantine-color-body, #fff)',
-      border: '1px solid var(--mantine-color-default-border)',
+  for (let i = 0; i < count; i++) {
+    const sq = document.createElement('div')
+    Object.assign(sq.style, {
+      position: 'absolute',
+      left: `${pad + i * step}px`,
+      top: `${pad + i * step}px`,
+      width: `${w}px`,
+      height: `${h}px`,
+      boxSizing: 'border-box',
+      border: '2px solid var(--mantine-color-text)',
+      borderRadius: '10px',
+      background: 'transparent',
+      transform: `rotate(${angles[i % angles.length]}deg)`,
     })
-    fillCard(c, paths[0])
-    wrap.appendChild(c)
-    return wrap
+    wrap.appendChild(sq)
   }
 
-  // Deck: up to 4 cards. If there are more, the front card is an overflow count.
-  const n = paths.length
-  const overflow = n > 4
-  const plain = overflow ? 3 : n
-  const total = plain + (overflow ? 1 : 0)
-  Object.assign(wrap.style, { width: `${56 + (total - 1) * 7}px`, height: `${40 + (total - 1) * 7}px` })
-
-  for (let i = 0; i < total; i++) {
-    const front = i === total - 1
-    const isOverflow = overflow && front
-    const c = card({
-      left: `${i * 7}px`,
-      top: `${i * 7}px`,
-      background: isOverflow ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-body, #fff)',
-      color: isOverflow ? 'var(--mantine-color-white)' : 'var(--mantine-color-text)',
-      border: isOverflow ? 'none' : '1px solid var(--mantine-color-default-border)',
+  if (n > count) {
+    const badge = document.createElement('div')
+    badge.textContent = `${n - count}+`
+    Object.assign(badge.style, {
+      position: 'absolute',
+      right: '2px',
+      bottom: '2px',
+      padding: '2px 9px',
+      borderRadius: '999px',
+      background: 'var(--mantine-primary-color-filled)',
+      color: 'var(--mantine-color-white)',
+      font: '700 12px var(--mantine-font-family)',
     })
-    if (isOverflow) c.textContent = `${n - plain}+`
-    else fillCard(c, paths[i])
-    wrap.appendChild(c)
+    wrap.appendChild(badge)
   }
   return wrap
 }
@@ -848,7 +831,7 @@ export default function App() {
       // multi-move fans out up to 4 cards, the last an overflow count when needed.
       const ghost = buildDragGhost(paths)
       document.body.appendChild(ghost)
-      e.dataTransfer.setDragImage(ghost, 14, 14)
+      e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2)
       setTimeout(() => ghost.remove(), 0)
     },
     [selected, onSelectMove, onSelectUp],
