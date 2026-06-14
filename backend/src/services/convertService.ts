@@ -34,7 +34,11 @@ export class ConvertService {
     this.resolver = new PathResolver(rootDir)
   }
 
-  async convert(relPath: string, format: string): Promise<Entry> {
+  async convert(
+    relPath: string,
+    format: string,
+    onProgress?: (fraction: number) => void,
+  ): Promise<Entry> {
     const abs = this.resolver.toAbsolute(relPath)
     let stat
     try {
@@ -54,22 +58,50 @@ export class ConvertService {
       await sharp(abs, { failOn: 'none', animated: sharpFmt === 'webp' || sharpFmt === 'gif' })
         .toFormat(sharpFmt)
         .toFile(target)
+      onProgress?.(1)
       return this.entryOf(target)
     }
 
     if (VIDEO_IN.has(srcExt)) {
       if (!VIDEO_OUT.has(fmt)) throw new ValidationError('Unsupported video format')
       const target = await this.uniquePath(abs, fmt)
-      await this.ffmpeg(abs, target)
+      const duration = await this.probeDuration(abs).catch(() => 0)
+      await this.ffmpeg(abs, target, duration, onProgress)
       return this.entryOf(target)
     }
 
     throw new ValidationError('Cannot convert this file type')
   }
 
-  private ffmpeg(src: string, target: string): Promise<void> {
+  private probeDuration(abs: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      const ff = spawn('ffmpeg', ['-y', '-i', src, target], { stdio: ['ignore', 'ignore', 'ignore'] })
+      const ff = spawn(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', abs],
+        { stdio: ['ignore', 'pipe', 'ignore'] },
+      )
+      let out = ''
+      ff.stdout.on('data', (d: Buffer) => (out += d))
+      ff.on('error', () => reject(new Error('ffprobe')))
+      ff.on('close', (code) => (code === 0 ? resolve(parseFloat(out.trim())) : reject(new Error('ffprobe'))))
+    })
+  }
+
+  private ffmpeg(
+    src: string,
+    target: string,
+    duration: number,
+    onProgress?: (fraction: number) => void,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', ['-y', '-i', src, '-progress', 'pipe:1', '-nostats', target], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      ff.stdout.on('data', (chunk: Buffer) => {
+        if (!duration || !onProgress) return
+        const m = /out_time_us=(\d+)/.exec(chunk.toString())
+        if (m) onProgress(Math.min(0.99, Number(m[1]) / 1e6 / duration))
+      })
       ff.on('error', () => reject(new NotFoundError('ffmpeg unavailable')))
       ff.on('close', (code) =>
         code === 0 ? resolve() : reject(new ValidationError('Conversion failed')),

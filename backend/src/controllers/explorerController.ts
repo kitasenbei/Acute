@@ -3,7 +3,7 @@ import { ValidationError } from '../errors.js'
 import type { ExplorerService } from '../services/explorerService.js'
 import type { ThumbnailService } from '../services/thumbnailService.js'
 import type { StoryboardService } from '../services/storyboardService.js'
-import type { ConvertService } from '../services/convertService.js'
+import type { JobService } from '../services/jobService.js'
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<void>
 
@@ -40,7 +40,7 @@ export class ExplorerController {
     private readonly service: ExplorerService,
     private readonly thumbnails: ThumbnailService,
     private readonly storyboards: StoryboardService,
-    private readonly converter: ConvertService,
+    private readonly jobs: JobService,
   ) {}
 
   list = wrap(async (req, res) => {
@@ -86,7 +86,12 @@ export class ExplorerController {
   })
 
   convert = wrap(async (req, res) => {
-    res.status(201).json(await this.converter.convert(pathParam(req.body?.path), req.body?.format))
+    // Kick off a background job and return immediately; client polls /jobs.
+    res.status(202).json(this.jobs.startConvert(pathParam(req.body?.path), req.body?.format))
+  })
+
+  jobsList = wrap(async (_req, res) => {
+    res.json(this.jobs.list())
   })
 
   rename = wrap(async (req, res) => {

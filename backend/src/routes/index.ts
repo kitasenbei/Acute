@@ -17,6 +17,7 @@ export function createExplorerRouter(controller: ExplorerController): Router {
   router.post('/copy', controller.copy)
   router.post('/move', controller.move)
   router.post('/convert', controller.convert)
+  router.get('/jobs', controller.jobsList)
   router.post('/upload', upload.single('file'), controller.upload)
   router.get('/content', controller.download)
   router.patch('/rename', controller.rename)

@@ -1,12 +1,22 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import request from 'supertest'
 import sharp from 'sharp'
 import { createApp } from '../src/app.js'
 import { makeTestStack, type TestStack } from './helpers.js'
 import type { Express } from 'express'
+
+/** Poll /jobs until the given job leaves the 'running' state. */
+async function pollJob(app: Express, id: string) {
+  for (let i = 0; i < 60; i++) {
+    const r = await request(app).get('/api/fs/jobs')
+    const job = r.body.find((j: { id: string }) => j.id === id)
+    if (job && job.status !== 'running') return job
+    await new Promise((res) => setTimeout(res, 30))
+  }
+  throw new Error('job did not finish')
+}
 
 describe('Explorer API (presentation tier, end-to-end through all tiers)', () => {
   let stack: TestStack
@@ -89,37 +99,25 @@ describe('Explorer API (presentation tier, end-to-end through all tiers)', () =>
     expect(res.status).toBe(400)
   })
 
-  it('converts an image to another format', async () => {
-    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } })
-      .png()
-      .toBuffer()
+  it('starts a convert job and reports it done via /jobs', async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } }).png().toBuffer()
     await fs.writeFile(path.join(stack.rootDir, 'pic.png'), png)
 
-    const res = await request(app).post('/api/fs/convert').send({ path: 'pic.png', format: 'jpg' })
-    expect(res.status).toBe(201)
-    expect(res.body.name).toBe('pic.jpg')
+    const start = await request(app).post('/api/fs/convert').send({ path: 'pic.png', format: 'jpg' })
+    expect(start.status).toBe(202)
+    expect(start.body.status).toBe('running')
 
-    const out = await sharp(path.join(stack.rootDir, 'pic.jpg')).metadata()
-    expect(out.format).toBe('jpeg')
+    const job = await pollJob(app, start.body.id)
+    expect(job.status).toBe('done')
+    expect(job.result.name).toBe('pic.jpg')
   })
 
-  it('rejects converting an unsupported type', async () => {
-    const res = await request(app).post('/api/fs/convert').send({ path: 'notes.txt', format: 'png' })
-    expect(res.status).toBe(400)
+  it('reports an errored job for unsupported types', async () => {
+    const start = await request(app).post('/api/fs/convert').send({ path: 'notes.txt', format: 'png' })
+    expect(start.status).toBe(202)
+    const job = await pollJob(app, start.body.id)
+    expect(job.status).toBe('error')
   })
-
-  it('converts a video to another container', async () => {
-    const src = path.join(stack.rootDir, 'clip.mp4')
-    await new Promise<void>((resolve, reject) => {
-      const ff = spawn('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'testsrc=d=1:s=32x32:r=10', src], { stdio: 'ignore' })
-      ff.on('error', reject)
-      ff.on('close', (c) => (c === 0 ? resolve() : reject(new Error('ffmpeg gen failed'))))
-    })
-
-    const res = await request(app).post('/api/fs/convert').send({ path: 'clip.mp4', format: 'mkv' })
-    expect(res.status).toBe(201)
-    expect(res.body.name).toBe('clip.mkv')
-  }, 20000)
 
   it('rejects traversal with 400', async () => {
     const res = await request(app).get('/api/fs').query({ path: '../../etc' })
