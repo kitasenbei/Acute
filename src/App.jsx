@@ -1300,11 +1300,13 @@ export default function App() {
             !creating && emptyState
           ) : (
             <VirtualEntries
+              key={activeTagId ? `tag:${activeTagId}` : `dir:${path}`}
               entries={entries}
               mode={mode}
               zoom={zoom}
               scrollRef={scrollRef}
               renderEntry={renderEntry}
+              tagsByPath={tagsByPath}
             />
           )}
         </Box>
