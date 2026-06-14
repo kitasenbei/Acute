@@ -17,6 +17,10 @@ function pathParam(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
+function pathList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
+}
+
 /**
  * Build a Content-Disposition that is safe for HTTP headers. The plain
  * `filename` must be ASCII (Node rejects other bytes), so non-ASCII names are
@@ -61,6 +65,22 @@ export class ExplorerController {
   createFolder = wrap(async (req, res) => {
     const { path: parent, name } = req.body ?? {}
     res.status(201).json(await this.service.createFolder(pathParam(parent), name))
+  })
+
+  createFile = wrap(async (req, res) => {
+    res.status(201).json(await this.service.createFile(pathParam(req.body?.path), req.body?.name))
+  })
+
+  duplicate = wrap(async (req, res) => {
+    res.status(201).json(await this.service.duplicate(pathParam(req.body?.path)))
+  })
+
+  copy = wrap(async (req, res) => {
+    res.status(201).json(await this.service.copy(pathList(req.body?.paths), pathParam(req.body?.destDir)))
+  })
+
+  move = wrap(async (req, res) => {
+    res.json(await this.service.move(pathList(req.body?.paths), pathParam(req.body?.destDir)))
   })
 
   rename = wrap(async (req, res) => {

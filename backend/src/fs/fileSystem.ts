@@ -51,6 +51,10 @@ export class FileSystem {
     await fs.rename(from, to)
   }
 
+  async cp(from: string, to: string): Promise<void> {
+    await fs.cp(from, to, { recursive: true })
+  }
+
   async remove(abs: string): Promise<void> {
     await fs.rm(abs, { recursive: true, force: true })
   }

@@ -89,6 +89,81 @@ export class ExplorerService {
     return this.entryOf(abs)
   }
 
+  async createFile(relParent: string, name: string): Promise<Entry> {
+    const fileName = assertValidName(name)
+    const abs = this.resolver.toAbsolute(path.posix.join(relParent || '', fileName))
+    if (await this.fs.exists(abs)) throw new ValidationError('An item with that name already exists')
+    await this.fs.writeFile(abs, Buffer.alloc(0))
+    return this.entryOf(abs)
+  }
+
+  async duplicate(relPath: string): Promise<Entry> {
+    const abs = this.resolver.toAbsolute(relPath)
+    if (abs === this.resolver.root) throw new ValidationError('Cannot duplicate the root')
+    await this.statOrThrow(abs)
+    const ext = path.extname(abs)
+    const base = path.basename(abs, ext)
+    const target = await this.uniquePath(path.dirname(abs), `${base} copy${ext}`)
+    await this.fs.cp(abs, target)
+    return this.entryOf(target)
+  }
+
+  copy(relPaths: string[], relDestDir: string): Promise<Entry[]> {
+    return this.transfer(relPaths, relDestDir, 'copy')
+  }
+
+  move(relPaths: string[], relDestDir: string): Promise<Entry[]> {
+    return this.transfer(relPaths, relDestDir, 'move')
+  }
+
+  private async transfer(relPaths: string[], relDestDir: string, mode: 'copy' | 'move'): Promise<Entry[]> {
+    const destDir = this.resolver.toAbsolute(relDestDir)
+    const destStat = await this.fs.stat(destDir).catch(() => null)
+    if (!destStat?.isDirectory()) throw new ValidationError('Destination is not a folder')
+
+    const results: Entry[] = []
+    for (const rel of relPaths) {
+      const src = this.resolver.toAbsolute(rel)
+      if (src === this.resolver.root) throw new ValidationError('Cannot move the root')
+      await this.statOrThrow(src)
+      if (destDir === src || destDir.startsWith(src + path.sep)) {
+        throw new ValidationError('Cannot move a folder into itself')
+      }
+      // Moving into its own directory is a no-op.
+      if (mode === 'move' && path.dirname(src) === destDir) {
+        results.push(await this.entryOf(src))
+        continue
+      }
+      const target = await this.uniquePath(destDir, path.basename(src))
+      if (mode === 'copy') {
+        await this.fs.cp(src, target)
+      } else {
+        try {
+          await this.fs.rename(src, target)
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'EXDEV') {
+            await this.fs.cp(src, target)
+            await this.fs.remove(src)
+          } else throw err
+        }
+      }
+      results.push(await this.entryOf(target))
+    }
+    return results
+  }
+
+  /** A non-colliding absolute path in `dir` for `name`, appending " (n)" if taken. */
+  private async uniquePath(dir: string, name: string): Promise<string> {
+    let candidate = name
+    let i = 1
+    while (await this.fs.exists(path.join(dir, candidate))) {
+      const ext = path.extname(name)
+      candidate = `${path.basename(name, ext)} (${i})${ext}`
+      i++
+    }
+    return path.join(dir, candidate)
+  }
+
   /** Build entries for a set of root-relative paths, skipping any that are
    * missing. Used by views that span directories (e.g. tag filters). */
   async entriesForPaths(relPaths: string[]): Promise<Entry[]> {

@@ -81,4 +81,33 @@ describe('ExplorerService (business tier)', () => {
     expect(file.mimeType).toBe('text/markdown')
     expect(file.content.toString()).toBe('# title')
   })
+
+  it('creates an empty file', async () => {
+    const entry = await service.createFile('', 'new.txt')
+    expect(entry).toMatchObject({ name: 'new.txt', type: 'file', size: 0 })
+  })
+
+  it('duplicates a file with a "copy" suffix', async () => {
+    const dup = await service.duplicate('notes.txt')
+    expect(dup.name).toBe('notes copy.txt')
+    expect((await service.getFileContent('notes copy.txt')).content.toString()).toBe('hello')
+  })
+
+  it('copies files into a folder (collision-safe)', async () => {
+    await service.copy(['notes.txt'], 'Docs')
+    await service.copy(['notes.txt'], 'Docs') // again -> deduped name
+    const names = (await service.listDir('Docs')).entries.map((e) => e.name)
+    expect(names).toContain('notes.txt')
+    expect(names).toContain('notes (1).txt')
+  })
+
+  it('moves files into a folder and removes the source', async () => {
+    await service.move(['notes.txt'], 'Docs')
+    expect((await service.listDir('')).entries.some((e) => e.name === 'notes.txt')).toBe(false)
+    expect((await service.listDir('Docs')).entries.some((e) => e.name === 'notes.txt')).toBe(true)
+  })
+
+  it('refuses to move a folder into itself', async () => {
+    await expect(service.move(['Docs'], 'Docs')).rejects.toBeInstanceOf(ValidationError)
+  })
 })
