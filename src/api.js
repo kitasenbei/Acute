@@ -29,6 +29,10 @@ export const api = {
     return fetch(`${BASE}/api/fs${q(path)}`).then(json)
   },
 
+  usage() {
+    return fetch(`${BASE}/api/fs/usage`).then(json)
+  },
+
   createFolder(path, name) {
     return fetch(`${BASE}/api/fs/folder`, {
       method: 'POST',

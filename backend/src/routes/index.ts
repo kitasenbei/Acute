@@ -9,6 +9,7 @@ const upload = multer({ storage: multer.memoryStorage() })
 export function createExplorerRouter(controller: ExplorerController): Router {
   const router = Router()
   router.get('/', controller.list)
+  router.get('/usage', controller.usage)
   router.get('/thumbnail', controller.thumbnail)
   router.get('/storyboard', controller.storyboard)
   router.post('/folder', controller.createFolder)

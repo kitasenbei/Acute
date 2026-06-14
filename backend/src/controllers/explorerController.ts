@@ -47,6 +47,10 @@ export class ExplorerController {
     res.json(await this.service.listDir(pathParam(req.query.path)))
   })
 
+  usage = wrap(async (_req, res) => {
+    res.json(await this.service.diskUsage())
+  })
+
   thumbnail = wrap(async (req, res) => {
     const size = Number(req.query.w) || 256
     const file = await this.thumbnails.getThumbnail(pathParam(req.query.path), size)

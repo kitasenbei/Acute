@@ -32,6 +32,11 @@ export class ExplorerService {
     this.resolver = new PathResolver(rootDir)
   }
 
+  /** Free/total bytes of the disk holding the browsing root. */
+  diskUsage(): Promise<{ free: number; total: number }> {
+    return this.fs.diskUsage(this.resolver.root)
+  }
+
   async listDir(relPath = ''): Promise<DirListing> {
     const abs = this.resolver.toAbsolute(relPath)
     const stat = await this.statOrThrow(abs)

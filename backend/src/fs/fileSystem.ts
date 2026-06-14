@@ -75,4 +75,9 @@ export class FileSystem {
       return false
     }
   }
+
+  async diskUsage(abs: string): Promise<{ free: number; total: number }> {
+    const s = await fs.statfs(abs)
+    return { free: s.bavail * s.bsize, total: s.blocks * s.bsize }
+  }
 }

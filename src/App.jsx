@@ -423,6 +423,7 @@ export default function App() {
   const [creating, setCreating] = useState(null) // 'folder' | 'file' | null
   const [dragOver, setDragOver] = useState(false)
   const [activeTagId, setActiveTagId] = useState(null)
+  const [usage, setUsage] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
   const [marquee, setMarquee] = useState(null) // viewport rect while drag-selecting
   const dragRef = useRef(null)
@@ -518,6 +519,14 @@ export default function App() {
     }
   }, [])
 
+  const loadUsage = useCallback(async () => {
+    try {
+      setUsage(await api.usage())
+    } catch {
+      // non-fatal
+    }
+  }, [])
+
   useEffect(() => {
     ;(async () => {
       try {
@@ -525,9 +534,9 @@ export default function App() {
       } catch (e) {
         setError(e.message)
       }
-      await Promise.all([load(''), loadFavorites(), loadPlaces(), loadTags()])
+      await Promise.all([load(''), loadFavorites(), loadPlaces(), loadTags(), loadUsage()])
     })()
-  }, [load, loadFavorites, loadPlaces, loadTags])
+  }, [load, loadFavorites, loadPlaces, loadTags, loadUsage])
 
   // When a background job finishes, refresh the view (the new file appears) and
   // auto-dismiss it from the status bar shortly after.
@@ -538,13 +547,14 @@ export default function App() {
         if (j.status === 'done') {
           if (activeTagId) loadTag(activeTagId, { silent: true })
           else load(path, { silent: true })
+          loadUsage()
         }
         const id = j.id
         setTimeout(() => dismissJob(id), 4000)
       }
       jobStatusRef.current[j.id] = j.status
     }
-  }, [jobs, load, loadTag, path, activeTagId, dismissJob])
+  }, [jobs, load, loadTag, path, activeTagId, dismissJob, loadUsage])
 
   // Ctrl+wheel zooms thumbnails. A native non-passive listener is required so we
   // can preventDefault and stop Chromium's built-in page zoom.
@@ -566,6 +576,12 @@ export default function App() {
   }, [listing, showHidden, sortBy, sortDir])
   const favSet = useMemo(() => new Set(favorites.map((f) => f.path)), [favorites])
   const activeTag = activeTagId ? tags.find((t) => t.id === activeTagId) : null
+
+  const summary = useMemo(() => {
+    let selectedSize = 0
+    for (const e of entries) if (selected.has(e.path) && e.type === 'file') selectedSize += e.size
+    return { items: entries.length, selectedCount: selected.size, selectedSize }
+  }, [entries, selected])
   const tagTree = useMemo(() => buildTagTree(tags), [tags])
 
   // Stable path -> Tag[] map so memoized rows only re-render when tags change.
@@ -1078,7 +1094,7 @@ export default function App() {
           )}
         </Box>
 
-        <StatusBar />
+        <StatusBar summary={summary} usage={usage} />
       </Flex>
 
       {marquee && (
