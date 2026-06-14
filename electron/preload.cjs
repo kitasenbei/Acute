@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('native', {
   openPath: (relPath) => ipcRenderer.invoke('native:openPath', relPath),
   // Reveal the item in the system file manager.
   showInFolder: (relPath) => ipcRenderer.invoke('native:showInFolder', relPath),
+  // Resolve a root-relative path to its absolute on-disk path.
+  resolvePath: (relPath) => ipcRenderer.invoke('native:resolvePath', relPath),
 })

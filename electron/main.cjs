@@ -28,6 +28,8 @@ ipcMain.handle('native:showInFolder', (_e, relPath) => {
   const abs = resolveInRoot(relPath)
   if (abs) shell.showItemInFolder(abs)
 })
+// Resolve a root-relative path to its absolute on-disk path (for "Copy path").
+ipcMain.handle('native:resolvePath', (_e, relPath) => resolveInRoot(relPath))
 
 // Launch the file-explorer backend as a child process. Its SQLite DB lives
 // under Electron's userData dir so favourites persist across restarts; the
