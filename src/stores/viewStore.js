@@ -35,7 +35,7 @@ export const useViewStore = create(
       // Thumbnail/icon zoom factor (Ctrl+wheel). Clamped to a sane range.
       zoom: 1,
       zoomBy: (delta) =>
-        set((s) => ({ zoom: Math.min(2, Math.max(0.6, +(s.zoom + delta).toFixed(2))) })),
+        set((s) => ({ zoom: Math.min(4, Math.max(0.6, +(s.zoom + delta).toFixed(2))) })),
 
       // Sorting: field + direction. Picking the active field flips direction.
       sortBy: 'name', // 'name' | 'modified' | 'size'
