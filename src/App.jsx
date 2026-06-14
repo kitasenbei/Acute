@@ -762,6 +762,28 @@ export default function App() {
       dragItemsRef.current = paths
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/plain', paths.join('\n'))
+
+      // Replace the default ghost (a screenshot of the hovered row, hover buttons
+      // and all) with a clean badge showing what's being moved.
+      const ghost = document.createElement('div')
+      ghost.textContent = paths.length > 1 ? `${paths.length} items` : (paths[0].split('/').pop() ?? 'item')
+      Object.assign(ghost.style, {
+        position: 'fixed',
+        top: '-1000px',
+        left: '-1000px',
+        padding: '6px 12px',
+        borderRadius: '8px',
+        background: 'var(--mantine-primary-color-filled)',
+        color: 'var(--mantine-color-white)',
+        font: '600 13px var(--mantine-font-family)',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.3)',
+        whiteSpace: 'nowrap',
+        pointerEvents: 'none',
+        zIndex: '9999',
+      })
+      document.body.appendChild(ghost)
+      e.dataTransfer.setDragImage(ghost, 12, 12)
+      setTimeout(() => ghost.remove(), 0)
     },
     [selected, onSelectMove, onSelectUp],
   )
