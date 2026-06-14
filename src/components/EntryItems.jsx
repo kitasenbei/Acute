@@ -24,15 +24,32 @@ export function NameField({ entry, onCommit, onCancel }) {
 }
 
 export const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onTogglePin, onContextMenu }) {
+  onTogglePin, onContextMenu, onDragStart, onDropInto, onDropOver, dropActive }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
   const base = compact ? 24 : 32
   const thumbSize = Math.round(base * zoom)
+  const dropProps = isDir
+    ? {
+        onDragOver: (e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          onDropOver?.(entry.path)
+        },
+        onDragLeave: () => onDropOver?.(null),
+        onDrop: (e) => {
+          e.preventDefault()
+          onDropInto?.(entry.path)
+        },
+      }
+    : {}
 
   return (
     <Flex
       data-path={entry.path}
+      draggable
+      onDragStart={(e) => onDragStart?.(entry, e)}
+      {...dropProps}
       align="center"
       gap="sm"
       px="md"
@@ -44,11 +61,15 @@ export const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact
       style={{
         borderRadius: 8,
         cursor: 'default',
-        background: selected
+        outline: dropActive ? '2px solid var(--mantine-primary-color-filled)' : undefined,
+        outlineOffset: -2,
+        background: dropActive
           ? 'var(--mantine-primary-color-light)'
-          : hover
-            ? 'var(--mantine-color-default-hover)'
-            : 'transparent',
+          : selected
+            ? 'var(--mantine-primary-color-light)'
+            : hover
+              ? 'var(--mantine-color-default-hover)'
+              : 'transparent',
       }}
     >
       <Thumb entry={entry} size={thumbSize} />
@@ -103,14 +124,31 @@ export const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact
 })
 
 export const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onTogglePin, onContextMenu }) {
+  onTogglePin, onContextMenu, onDragStart, onDropInto, onDropOver, dropActive }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
   const thumbSize = Math.round(64 * zoom)
+  const dropProps = isDir
+    ? {
+        onDragOver: (e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          onDropOver?.(entry.path)
+        },
+        onDragLeave: () => onDropOver?.(null),
+        onDrop: (e) => {
+          e.preventDefault()
+          onDropInto?.(entry.path)
+        },
+      }
+    : {}
 
   return (
     <Flex
       data-path={entry.path}
+      draggable
+      onDragStart={(e) => onDragStart?.(entry, e)}
+      {...dropProps}
       direction="column"
       align="center"
       gap={8}
@@ -123,7 +161,9 @@ export const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom 
         position: 'relative',
         borderRadius: 10,
         cursor: 'default',
-        background: selected
+        outline: dropActive ? '2px solid var(--mantine-primary-color-filled)' : undefined,
+        outlineOffset: -2,
+        background: dropActive || selected
           ? 'var(--mantine-primary-color-light)'
           : hover
             ? 'var(--mantine-color-default-hover)'

@@ -11,8 +11,25 @@ export function SidebarLabel({ children, first }) {
   )
 }
 
-export function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin }) {
+export function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin, dropPath, onDropInto }) {
   const [hover, setHover] = useState(false)
+  const [dropOver, setDropOver] = useState(false)
+  const canDrop = dropPath != null && onDropInto
+  const dropProps = canDrop
+    ? {
+        onDragOver: (e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          setDropOver(true)
+        },
+        onDragLeave: () => setDropOver(false),
+        onDrop: (e) => {
+          e.preventDefault()
+          setDropOver(false)
+          onDropInto(dropPath)
+        },
+      }
+    : {}
   return (
     <Flex
       align="center"
@@ -22,10 +39,13 @@ export function SidebarItem({ icon: Icon, dot, label, active, onClick, onUnpin }
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      {...dropProps}
       style={{
         borderRadius: 8,
         cursor: 'pointer',
-        background: active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
+        outline: dropOver ? '2px solid var(--mantine-primary-color-filled)' : undefined,
+        outlineOffset: -2,
+        background: dropOver || active || hover ? 'var(--mantine-color-default-hover)' : 'transparent',
       }}
     >
       {dot ? (

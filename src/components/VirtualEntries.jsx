@@ -12,10 +12,17 @@ import { Box } from '@mantine/core'
  */
 export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, tagsByPath }) {
   const grid = mode === 'grid'
+  // The scroll viewport's *content* width — clientWidth minus its horizontal
+  // padding (the marquee gutters) — so the grid column count stays correct.
+  const measureWidth = (el) => {
+    if (!el) return 0
+    const cs = getComputedStyle(el)
+    return el.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0)
+  }
   // Seed from the live element so the very first paint already has the real
   // width — otherwise the grid briefly computes 1 column (a single-column flash,
   // re-triggered on every remount via the view key).
-  const [width, setWidth] = useState(() => scrollRef.current?.clientWidth ?? 0)
+  const [width, setWidth] = useState(() => measureWidth(scrollRef.current))
 
   // A tile's height depends on how many tags it carries, which can arrive/change
   // after the row first mounts. tanstack caches measurements by data-index and
@@ -30,8 +37,8 @@ export function VirtualEntries({ entries, mode, zoom, scrollRef, renderEntry, ta
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    setWidth(el.clientWidth)
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth))
+    setWidth(measureWidth(el))
+    const ro = new ResizeObserver(() => setWidth(measureWidth(el)))
     ro.observe(el)
     return () => ro.disconnect()
   }, [scrollRef])

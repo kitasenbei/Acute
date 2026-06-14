@@ -108,6 +108,8 @@ export default function App() {
   const jobStatusRef = useRef({})
   const anchorRef = useRef(null) // last clicked path, for shift-range selection
   const entriesRef = useRef([]) // current visible entries, for index-based selection
+  const dragItemsRef = useRef([]) // paths being drag-moved
+  const [dropTarget, setDropTarget] = useState(null) // folder path under the drag
   const openSettings = useSettingsStore((s) => s.openSettings)
   const mode = useViewStore((s) => s.mode)
   const setMode = useViewStore((s) => s.setMode)
@@ -732,6 +734,54 @@ export default function App() {
     [selected, onSelectMove, onSelectUp, applyMarquee],
   )
 
+  // --- Drag entries to move them into a folder ------------------------------
+  // Starting a native drag also tears down any marquee the mousedown began, so
+  // its listeners/rAF don't dangle (drag suppresses mousemove/mouseup).
+  const handleDragStart = useCallback(
+    (entry, e) => {
+      const d = dragRef.current
+      if (d?.raf) cancelAnimationFrame(d.raf)
+      window.removeEventListener('mousemove', onSelectMove)
+      window.removeEventListener('mouseup', onSelectUp)
+      dragRef.current = null
+      setMarquee(null)
+
+      // Drag the whole selection if the grabbed item is part of it, else just it.
+      let paths
+      if (selected.has(entry.path) && selected.size > 0) {
+        paths = [...selected]
+      } else {
+        paths = [entry.path]
+        setSelected(new Set([entry.path]))
+      }
+      dragItemsRef.current = paths
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', paths.join('\n'))
+    },
+    [selected, onSelectMove, onSelectUp],
+  )
+
+  // Move the dragged items into `destDir`, skipping no-ops (an item dropped on
+  // itself or into the folder it already lives in).
+  const moveInto = useCallback(
+    (destDir) => {
+      const items = dragItemsRef.current
+      dragItemsRef.current = []
+      setDropTarget(null)
+      const targets = items.filter((p) => {
+        if (p === destDir) return false
+        const parent = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
+        return parent !== destDir
+      })
+      if (!targets.length) return
+      run(async () => {
+        await api.move(targets, destDir)
+        setSelected(new Set())
+      })
+    },
+    [run],
+  )
+
   // Props shared by every view mode (key is passed explicitly at the call site).
   const entryProps = (entry) => ({
     entry,
@@ -747,6 +797,10 @@ export default function App() {
     onCancelEdit: handleCancelEdit,
     onTogglePin: togglePin,
     onContextMenu: handleContextMenu,
+    onDragStart: handleDragStart,
+    onDropInto: moveInto,
+    onDropOver: setDropTarget,
+    dropActive: dropTarget === entry.path,
   })
 
   // Renders one entry for the virtualizer, picking row vs. tile by view mode.
@@ -787,7 +841,7 @@ export default function App() {
         style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}>
         <Box style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <SidebarLabel first>Places</SidebarLabel>
-          <SidebarItem icon={IconHome} label="Home" active={path === ''} onClick={() => load('')} />
+          <SidebarItem icon={IconHome} label="Home" active={path === ''} onClick={() => load('')} dropPath="" onDropInto={moveInto} />
           {places.map((p) => (
             <SidebarItem
               key={p.name}
@@ -795,6 +849,8 @@ export default function App() {
               label={p.name}
               active={path === p.name}
               onClick={() => load(p.name)}
+              dropPath={p.name}
+              onDropInto={moveInto}
             />
           ))}
           {favorites.length > 0 && <SidebarLabel>Favorites</SidebarLabel>}
@@ -806,6 +862,8 @@ export default function App() {
               active={path === fav.path}
               onClick={() => load(fav.path)}
               onUnpin={() => unpin(fav.path)}
+              dropPath={fav.path}
+              onDropInto={moveInto}
             />
           ))}
           {tags.length > 0 && <SidebarLabel>Tags</SidebarLabel>}
@@ -826,9 +884,9 @@ export default function App() {
         ref={contentRef}
         direction="column"
         style={{ flex: 1, minWidth: 0, outline: dragOver ? '2px dashed var(--mantine-color-blue-5)' : 'none', outlineOffset: -8 }}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer.types.includes('Files')) setDragOver(true) }}
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false) }}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!activeTagId) uploadAll(e.dataTransfer.files) }}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); if (!activeTagId && e.dataTransfer.files.length) uploadAll(e.dataTransfer.files) }}
       >
         <Flex align="center" justify="space-between" gap="sm" px="md" h={52}
           style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
@@ -1049,8 +1107,10 @@ export default function App() {
           </Flex>
         )}
 
+        {/* 30px side gutters: empty space that belongs to the scroll viewport,
+            so users have room to start a marquee drag without grabbing a row. */}
         <Box ref={scrollRef} onMouseDown={onSelectDown}
-          style={{ flex: 1, minHeight: 0, overflowY: 'auto', userSelect: 'none' }}>
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', userSelect: 'none', paddingInline: 30 }}>
           {loading || (searching && searchResults === null) ? (
             <Center h={240}><Loader size="sm" /></Center>
           ) : entries.length === 0 ? (
