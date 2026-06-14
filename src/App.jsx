@@ -4,6 +4,7 @@ import {
   Center,
   Flex,
   Group,
+  Stack,
   Loader,
   ColorSwatch,
   SegmentedControl,
@@ -988,18 +989,20 @@ export default function App() {
         style={{ borderRight: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}>
         <Box style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
           <SidebarLabel first>Places</SidebarLabel>
-          <SidebarItem icon={IconHome} label="Home" active={path === ''} onClick={() => load('')} dropPath="" onDropInto={moveInto} />
-          {places.map((p) => (
-            <SidebarItem
-              key={p.name}
-              icon={p.icon}
-              label={p.name}
-              active={path === p.name}
-              onClick={() => load(p.name)}
-              dropPath={p.name}
-              onDropInto={moveInto}
-            />
-          ))}
+          <Stack gap={4}>
+            <SidebarItem icon={IconHome} label="Home" active={path === ''} onClick={() => load('')} dropPath="" onDropInto={moveInto} />
+            {places.map((p) => (
+              <SidebarItem
+                key={p.name}
+                icon={p.icon}
+                label={p.name}
+                active={path === p.name}
+                onClick={() => load(p.name)}
+                dropPath={p.name}
+                onDropInto={moveInto}
+              />
+            ))}
+          </Stack>
           {favorites.length > 0 && <SidebarLabel>Favorites</SidebarLabel>}
           {favorites.map((fav) => (
             <SidebarItem
