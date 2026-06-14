@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, clipboard, nativeImage } = require('
 const path = require('path')
 const os = require('os')
 const fs = require('fs')
+const { pathToFileURL } = require('url')
 const { spawn, execSync } = require('child_process')
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -127,6 +128,7 @@ ipcMain.handle('native:resolvePath', (_e, relPath) => resolveInRoot(relPath))
 ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {
   const files = (Array.isArray(relPaths) ? relPaths : []).map(resolveInRoot).filter(Boolean)
   if (!files.length) return null
+  // A single image goes on as a bitmap so chat/editor apps can paste it.
   if (files.length === 1 && /\.(png|jpe?g|gif|bmp)$/i.test(files[0])) {
     const img = nativeImage.createFromPath(files[0])
     if (!img.isEmpty()) {
@@ -134,8 +136,16 @@ ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {
       return 'image'
     }
   }
-  clipboard.writeText(files.join('\n'))
-  return 'text'
+  // Otherwise put a real file reference on the clipboard so file managers
+  // (PCManFM, Nemo, Nautilus, Caja…) paste an actual copy of the file(s).
+  const uris = files.map((f) => pathToFileURL(f).href).join('\n')
+  try {
+    clipboard.writeBuffer('x-special/gnome-copied-files', Buffer.from(`copy\n${uris}`, 'utf8'))
+    return 'files'
+  } catch {
+    clipboard.writeText(files.join('\n'))
+    return 'text'
+  }
 })
 // The OS's native file-type icon as a PNG data URL (for the "System" icon theme).
 ipcMain.handle('native:fileIcon', async (_e, relPath) => {
