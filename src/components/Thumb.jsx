@@ -31,7 +31,11 @@ export function Thumb({ entry, size }) {
   // Backend serves a small cached WebP, so the renderer only decodes a tiny
   // image — no full-resolution decode, no <video> elements in the listing.
   if (!failed && hasThumb) {
-    const px = Math.min(512, Math.round(size * 2)) // a touch sharper than 1x
+    // Request one of a few fixed sizes (not size*2) so zooming reuses the same
+    // URL — and the browser cache — until it crosses a bucket, instead of
+    // refetching a new resolution on every zoom step.
+    const want = size * 2
+    const px = want <= 128 ? 128 : want <= 256 ? 256 : 512
     return (
       <Box style={thumbBox(size)}>
         <img
