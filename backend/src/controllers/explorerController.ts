@@ -83,9 +83,11 @@ export class ExplorerController {
   })
 
   download = wrap(async (req, res) => {
-    const file = await this.service.getFileContent(pathParam(req.query.path))
-    res.setHeader('Content-Type', file.mimeType)
-    res.setHeader('Content-Disposition', contentDisposition(file.name))
-    res.send(file.content)
+    const { abs, name, mimeType } = await this.service.fileInfo(pathParam(req.query.path))
+    res.type(mimeType)
+    res.setHeader('Content-Disposition', contentDisposition(name))
+    // sendFile adds Accept-Ranges and serves 206 Partial Content for Range
+    // requests, so media (audio/video) can seek to unbuffered positions.
+    res.sendFile(abs)
   })
 }

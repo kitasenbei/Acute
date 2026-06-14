@@ -115,6 +115,14 @@ export class ExplorerService {
     }
   }
 
+  /** Resolve a file's absolute path + metadata (for range-enabled streaming). */
+  async fileInfo(relPath: string): Promise<{ abs: string; name: string; mimeType: string }> {
+    const abs = this.resolver.toAbsolute(relPath)
+    const stat = await this.statOrThrow(abs)
+    if (stat.isDirectory()) throw new ValidationError('Cannot download a directory')
+    return { abs, name: path.basename(abs), mimeType: mimeFromName(abs) }
+  }
+
   private async statOrThrow(abs: string) {
     try {
       return await this.fs.stat(abs)
