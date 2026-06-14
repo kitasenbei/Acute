@@ -136,16 +136,28 @@ ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {
       return 'image'
     }
   }
-  // Otherwise put a real file reference on the clipboard so file managers
-  // (PCManFM, Nemo, Nautilus, Caja…) paste an actual copy of the file(s).
-  const uris = files.map((f) => pathToFileURL(f).href).join('\n')
+  // Otherwise put a real file reference on the clipboard. Two targets:
+  //  - text/uri-list: the standard Chromium apps (Discord, browsers) read on
+  //    paste, turning it into an attached file.
+  //  - x-special/gnome-copied-files: what GTK file managers (PCManFM, Nemo,
+  //    Nautilus, Caja) read to paste a copy.
+  const uris = files.map((f) => pathToFileURL(f).href)
+  let wrote = false
   try {
-    clipboard.writeBuffer('x-special/gnome-copied-files', Buffer.from(`copy\n${uris}`, 'utf8'))
-    return 'files'
+    clipboard.writeBuffer('x-special/gnome-copied-files', Buffer.from(`copy\n${uris.join('\n')}`, 'utf8'))
+    wrote = true
   } catch {
-    clipboard.writeText(files.join('\n'))
-    return 'text'
+    /* unsupported — ignore */
   }
+  try {
+    clipboard.writeBuffer('text/uri-list', Buffer.from(`${uris.join('\r\n')}\r\n`, 'utf8'))
+    wrote = true
+  } catch {
+    /* unsupported — ignore */
+  }
+  if (wrote) return 'files'
+  clipboard.writeText(files.join('\n'))
+  return 'text'
 })
 // The OS's native file-type icon as a PNG data URL (for the "System" icon theme).
 ipcMain.handle('native:fileIcon', async (_e, relPath) => {
