@@ -6,6 +6,7 @@ import {
   IconVolume,
   IconVolumeOff,
   IconMaximize,
+  IconMinimize,
   IconChevronUp,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
@@ -29,6 +30,7 @@ export function VideoPlayer({ src, path }) {
   const [storyboard, setStoryboard] = useState(null)
   const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
   const [scrubX, setScrubX] = useState(null) // cursor ratio (0..1) while dragging; null otherwise
+  const [isFullscreen, setIsFullscreen] = useState(false)
   // Volume/mute are remembered across videos and sessions.
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -77,6 +79,13 @@ export function VideoPlayer({ src, path }) {
       v.muted = muted
     }
   }, [volume, muted, src])
+
+  // Track fullscreen so the stage can fill the screen (and all overlays follow).
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(document.fullscreenElement === stageRef.current)
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [])
 
   const video = () => videoRef.current
 
@@ -172,8 +181,8 @@ export function VideoPlayer({ src, path }) {
       onMouseLeave={() => setHovering(false)}
       style={{
         position: 'relative',
-        width: '100%',
-        height: '74vh',
+        width: isFullscreen ? '100vw' : '100%',
+        height: isFullscreen ? '100vh' : '74vh',
         background: '#000',
         overflow: 'hidden',
         userSelect: 'none',
@@ -356,7 +365,7 @@ export function VideoPlayer({ src, path }) {
                 </Text>
               </Group>
               <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
-                <IconMaximize size={18} />
+                {isFullscreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
               </ActionIcon>
             </Group>
           </Box>
