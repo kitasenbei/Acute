@@ -14,18 +14,6 @@ import { api } from '../api.js'
 import { usePlayerStore } from '../stores/playerStore.js'
 import { useSettingsStore } from '../stores/settingsStore.js'
 
-// Animate an element's box from one viewport rect to another (FLIP-style).
-function animateRect(el, from, to, onfinish) {
-  const anim = el.animate(
-    [
-      { top: `${from.top}px`, left: `${from.left}px`, width: `${from.width}px`, height: `${from.height}px` },
-      { top: `${to.top}px`, left: `${to.left}px`, width: `${to.width}px`, height: `${to.height}px` },
-    ],
-    { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
-  )
-  if (onfinish) anim.onfinish = onfinish
-}
-
 /**
  * Custom video player: the video fills a black stage (small clips scale up,
  * aspect ratio preserved) and the native controls are replaced with a clean
@@ -43,9 +31,7 @@ export function VideoPlayer({ src, path }) {
   const [storyboard, setStoryboard] = useState(null)
   const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
   const [scrubX, setScrubX] = useState(null) // cursor ratio (0..1) while dragging; null otherwise
-  const [expanded, setExpanded] = useState(false)
-  const originRectRef = useRef(null)
-  const animatingRef = useRef(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   // Volume/mute are remembered across videos and sessions.
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -94,6 +80,13 @@ export function VideoPlayer({ src, path }) {
       v.muted = muted
     }
   }, [volume, muted, src])
+
+  // Track fullscreen so the stage can fill the screen (and all overlays follow).
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(document.fullscreenElement === stageRef.current)
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [])
 
   const video = () => videoRef.current
 
@@ -163,44 +156,10 @@ export function VideoPlayer({ src, path }) {
     changeVolume(next)
   }
 
-  // Option C: smoothly expand the stage to fill the window (FLIP animation),
-  // then go native fullscreen so it also covers the monitor.
-  const expand = useCallback(() => {
-    const el = stageRef.current
-    if (!el || expanded) return
-    originRectRef.current = el.getBoundingClientRect()
-    setExpanded(true)
-    requestAnimationFrame(() => {
-      const full = el.getBoundingClientRect()
-      animateRect(el, originRectRef.current, full, () => el.requestFullscreen?.().catch(() => {}))
-    })
-  }, [expanded])
-
-  const collapse = useCallback(() => {
-    const el = stageRef.current
-    if (!el || !expanded || animatingRef.current) return
-    animatingRef.current = true
-    const back = () => {
-      const from = el.getBoundingClientRect()
-      animateRect(el, from, originRectRef.current, () => {
-        setExpanded(false)
-        animatingRef.current = false
-      })
-    }
-    if (document.fullscreenElement) document.exitFullscreen().then(back).catch(back)
-    else back()
-  }, [expanded])
-
-  const toggleFullscreen = () => (expanded ? collapse() : expand())
-
-  // Collapse if the user leaves native fullscreen another way (e.g. Esc).
-  useEffect(() => {
-    const onFs = () => {
-      if (!document.fullscreenElement && expanded && !animatingRef.current) collapse()
-    }
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [expanded, collapse])
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen()
+    else stageRef.current?.requestFullscreen?.()
+  }
 
   // Show controls on activity; auto-hide after a couple seconds of stillness.
   const pokeControls = useCallback(() => {
@@ -242,12 +201,9 @@ export function VideoPlayer({ src, path }) {
         if (playing) setControlsActive(false)
       }}
       style={{
-        position: expanded ? 'fixed' : 'relative',
-        top: expanded ? 0 : undefined,
-        left: expanded ? 0 : undefined,
-        zIndex: expanded ? 1000 : undefined,
-        width: expanded ? '100vw' : '100%',
-        height: expanded ? '100vh' : '74vh',
+        position: 'relative',
+        width: isFullscreen ? '100vw' : '100%',
+        height: isFullscreen ? '100vh' : '74vh',
         background: '#000',
         overflow: 'hidden',
         userSelect: 'none',
@@ -430,7 +386,7 @@ export function VideoPlayer({ src, path }) {
                 </Text>
               </Group>
               <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
-                {expanded ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
+                {isFullscreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
               </ActionIcon>
             </Group>
           </Box>
