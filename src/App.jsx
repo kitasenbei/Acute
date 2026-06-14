@@ -102,8 +102,8 @@ function buildDragGhost(paths) {
     }
     if (thumb) thumbByPath.set(node.dataset.path, thumb)
   }
-  const sources = paths.map((p) => thumbByPath.get(p)).filter(Boolean)
-  const ref = sources[0]?.getBoundingClientRect()
+  const sources = paths.map((p) => ({ el: thumbByPath.get(p), path: p })).filter((s) => s.el)
+  const ref = sources[0]?.el.getBoundingClientRect()
   const size = Math.round(ref?.width || ref?.height || 48)
 
   const n = paths.length
@@ -131,13 +131,20 @@ function buildDragGhost(paths) {
       top: `${pad + i * step}px`,
       width: `${size}px`,
       height: `${size}px`,
+      overflow: 'hidden',
+      borderRadius: '6px',
       transform: `rotate(${angles[i % angles.length]}deg)`,
     })
-    if (src) {
-      const clone = src.cloneNode(true)
-      Object.assign(clone.style, { width: '100%', height: '100%', objectFit: 'contain', display: 'block' })
-      card.appendChild(clone)
-    }
+    const clone = src.el.cloneNode(true)
+    // Video thumbnails fill the square (cover); everything else fits whole.
+    const isVideo = fileKind({ name: src.path.split('/').pop(), type: 'file' }) === 'video'
+    Object.assign(clone.style, {
+      width: '100%',
+      height: '100%',
+      objectFit: isVideo ? 'cover' : 'contain',
+      display: 'block',
+    })
+    card.appendChild(clone)
     wrap.appendChild(card)
   }
 
