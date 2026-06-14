@@ -8,6 +8,7 @@ import {
   IconMaximize,
   IconMinimize,
   IconChevronUp,
+  IconRepeat,
 } from '@tabler/icons-react'
 import { formatTime } from '../util.js'
 import { api } from '../api.js'
@@ -32,6 +33,7 @@ export function VideoPlayer({ src, path }) {
   const [seekHover, setSeekHover] = useState(null) // { x, w, time } while hovering the bar
   const [scrubX, setScrubX] = useState(null) // cursor ratio (0..1) while dragging; null otherwise
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [loop, setLoop] = useState(false)
   // Volume/mute are remembered across videos and sessions.
   const volume = usePlayerStore((s) => s.volume)
   const muted = usePlayerStore((s) => s.muted)
@@ -213,6 +215,7 @@ export function VideoPlayer({ src, path }) {
       <video
         ref={videoRef}
         src={src}
+        loop={loop}
         onClick={togglePlay}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
@@ -385,6 +388,14 @@ export function VideoPlayer({ src, path }) {
                   {formatTime(current)} / {formatTime(duration)}
                 </Text>
               </Group>
+              <ActionIcon
+                variant="transparent"
+                style={{ ...iconStyle, color: loop ? 'var(--mantine-color-blue-4)' : iconStyle.color }}
+                onClick={() => setLoop((v) => !v)}
+                title={loop ? 'Looping' : 'Loop'}
+              >
+                <IconRepeat size={18} />
+              </ActionIcon>
               <ActionIcon variant="transparent" style={iconStyle} onClick={toggleFullscreen}>
                 {isFullscreen ? <IconMinimize size={18} /> : <IconMaximize size={18} />}
               </ActionIcon>
