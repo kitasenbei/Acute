@@ -207,7 +207,7 @@ function NameField({ entry, onCommit, onCancel }) {
   )
 }
 
-const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -217,6 +217,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
 
   return (
     <Flex
+      data-path={entry.path}
       align="center"
       gap="sm"
       px="md"
@@ -228,7 +229,11 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
       style={{
         borderRadius: 8,
         cursor: 'default',
-        background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
+        background: selected
+          ? 'var(--mantine-primary-color-light)'
+          : hover
+            ? 'var(--mantine-color-default-hover)'
+            : 'transparent',
       }}
     >
       <Thumb entry={entry} size={thumbSize} iconSize={thumbIcon} />
@@ -289,7 +294,7 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
   )
 })
 
-const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
+const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
   onDelete, onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
@@ -297,6 +302,7 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, ta
 
   return (
     <Flex
+      data-path={entry.path}
       direction="column"
       align="center"
       gap={8}
@@ -309,7 +315,11 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, ta
         position: 'relative',
         borderRadius: 10,
         cursor: 'default',
-        background: hover ? 'var(--mantine-color-default-hover)' : 'transparent',
+        background: selected
+          ? 'var(--mantine-primary-color-light)'
+          : hover
+            ? 'var(--mantine-color-default-hover)'
+            : 'transparent',
       }}
     >
       {hover && (
@@ -397,6 +407,9 @@ export default function App() {
   const [creating, setCreating] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [activeTagId, setActiveTagId] = useState(null)
+  const [selected, setSelected] = useState(() => new Set())
+  const [marquee, setMarquee] = useState(null) // viewport rect while drag-selecting
+  const dragRef = useRef(null)
   const resetRef = useRef(null)
   const contentRef = useRef(null)
   const scrollRef = useRef(null)
@@ -424,6 +437,7 @@ export default function App() {
       setListing(await api.list(p))
       setPath(p)
       setActiveTagId(null) // navigating a directory clears any tag filter
+      setSelected(new Set())
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -439,6 +453,7 @@ export default function App() {
       const { entries } = await api.tags.files(tagId)
       setListing({ path: '', parent: null, entries })
       setActiveTagId(tagId)
+      setSelected(new Set())
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -661,11 +676,79 @@ export default function App() {
     [openContextMenu, buildMenuItems],
   )
 
+  // --- Rubber-band (marquee) selection -------------------------------------
+  const onSelectMove = useCallback((e) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
+    if (!d.moved && Math.hypot(dx, dy) < 5) return
+    d.moved = true
+
+    const left = Math.min(e.clientX, d.startX)
+    const top = Math.min(e.clientY, d.startY)
+    const width = Math.abs(dx)
+    const height = Math.abs(dy)
+    setMarquee({ left, top, width, height })
+
+    // Select entries whose rendered rect intersects the marquee.
+    const next = new Set(d.base)
+    const nodes = scrollRef.current?.querySelectorAll('[data-path]') ?? []
+    for (const node of nodes) {
+      const r = node.getBoundingClientRect()
+      if (r.left < left + width && r.right > left && r.top < top + height && r.bottom > top) {
+        next.add(node.dataset.path)
+      }
+    }
+    setSelected(next)
+  }, [])
+
+  const onSelectUp = useCallback(() => {
+    const d = dragRef.current
+    window.removeEventListener('mousemove', onSelectMove)
+    window.removeEventListener('mouseup', onSelectUp)
+    setMarquee(null)
+    if (d && !d.moved) {
+      // A plain click: select the clicked item, toggle with ctrl/meta, or clear.
+      if (d.downPath) {
+        setSelected((prev) => {
+          if (!d.additive) return new Set([d.downPath])
+          const n = new Set(prev)
+          n.has(d.downPath) ? n.delete(d.downPath) : n.add(d.downPath)
+          return n
+        })
+      } else if (!d.additive) {
+        setSelected(new Set())
+      }
+    }
+    dragRef.current = null
+  }, [onSelectMove])
+
+  const onSelectDown = useCallback(
+    (e) => {
+      if (e.button !== 0) return
+      if (e.target.closest('button, input, a, [role="slider"], [contenteditable="true"]')) return
+      const additive = e.ctrlKey || e.metaKey
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        downPath: e.target.closest('[data-path]')?.dataset.path ?? null,
+        additive,
+        base: additive ? new Set(selected) : new Set(),
+        moved: false,
+      }
+      window.addEventListener('mousemove', onSelectMove)
+      window.addEventListener('mouseup', onSelectUp)
+    },
+    [selected, onSelectMove, onSelectUp],
+  )
+
   // Props shared by every view mode (key is passed explicitly at the call site).
   const entryProps = (entry) => ({
     entry,
     editing: editingPath === entry.path,
     pinned: favSet.has(entry.path),
+    selected: selected.has(entry.path),
     zoom,
     tags: tagsByPath.get(entry.path) ?? EMPTY_TAGS,
     onOpen: handleOpen,
@@ -883,7 +966,8 @@ export default function App() {
           </Flex>
         )}
 
-        <Box ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <Box ref={scrollRef} onMouseDown={onSelectDown}
+          style={{ flex: 1, minHeight: 0, overflowY: 'auto', userSelect: 'none' }}>
           {loading ? (
             <Center h={240}><Loader size="sm" /></Center>
           ) : entries.length === 0 ? (
@@ -899,6 +983,22 @@ export default function App() {
           )}
         </Box>
       </Flex>
+
+      {marquee && (
+        <Box
+          style={{
+            position: 'fixed',
+            left: marquee.left,
+            top: marquee.top,
+            width: marquee.width,
+            height: marquee.height,
+            background: 'var(--mantine-primary-color-light)',
+            border: '1px solid var(--mantine-primary-color-filled)',
+            pointerEvents: 'none',
+            zIndex: 1000,
+          }}
+        />
+      )}
     </Flex>
   )
 }
