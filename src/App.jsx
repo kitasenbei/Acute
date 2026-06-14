@@ -591,8 +591,11 @@ export default function App() {
     // Clipboard ops (work on the whole target set).
     items.push({ label: many ? `Cut ${targets.length} items` : 'Cut', icon: IconScissors, onClick: () => setClipboard(targets, 'cut') })
     items.push({ label: many ? `Copy ${targets.length} items` : 'Copy', icon: IconCopy, onClick: () => setClipboard(targets, 'copy') })
-    if (isDir && clipItems.length) {
-      items.push({ label: `Paste (${clipItems.length})`, icon: IconClipboard, onClick: () => paste(entry.path) })
+    // Paste into the right-clicked folder, or otherwise the current directory —
+    // so Paste is reachable even when right-clicking a file or empty space.
+    if (clipItems.length && !activeTagId) {
+      const dest = isDir ? entry.path : path
+      items.push({ label: `Paste (${clipItems.length})`, icon: IconClipboard, onClick: () => paste(dest) })
     }
     if (!many) items.push({ label: 'Duplicate', icon: IconCopyPlus, onClick: () => run(() => api.duplicate(entry.path)) })
     items.push({ label: many ? 'Copy paths' : 'Copy path', icon: IconClipboardCopy, onClick: () => copyPath(targets) })
@@ -665,7 +668,7 @@ export default function App() {
       onClick: () => run(async () => { for (const p of targets) await api.remove(p) }),
     })
     return items
-  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath, activeTagId, setFilterText])
+  }, [load, openPreview, favSet, togglePin, run, tags, assignments, toggleTag, openTagManager, tagTree, selected, clipItems, setClipboard, paste, startConvert, enqueue, copyPath, activeTagId, setFilterText, path])
 
   // Stable handler references so memoized rows don't re-render while scrolling.
   const handleOpen = useCallback((e) => load(e.path), [load])
