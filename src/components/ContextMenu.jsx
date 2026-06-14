@@ -1,5 +1,5 @@
 import { Menu, ColorSwatch } from '@mantine/core'
-import { IconCheck, IconChevronRight } from '@tabler/icons-react'
+import { IconCheck } from '@tabler/icons-react'
 import { useContextMenuStore } from '../stores/contextMenuStore.js'
 
 function leftSectionFor(item) {
@@ -13,30 +13,15 @@ function renderItems(items, close) {
   return items.map((item, i) => {
     if (item.divider) return <Menu.Divider key={`divider-${i}`} />
 
-    // A submenu opens to the side on hover.
+    // Native Mantine v8 submenu.
     if (item.submenu) {
       return (
-        <Menu
-          key={item.label}
-          trigger="hover"
-          position="right-start"
-          offset={2}
-          shadow="md"
-          width={180}
-          withinPortal
-          closeOnItemClick={false}
-        >
-          <Menu.Target>
-            <Menu.Item
-              leftSection={leftSectionFor(item)}
-              rightSection={<IconChevronRight size={14} />}
-              closeMenuOnClick={false}
-            >
-              {item.label}
-            </Menu.Item>
-          </Menu.Target>
-          <Menu.Dropdown>{renderItems(item.submenu, close)}</Menu.Dropdown>
-        </Menu>
+        <Menu.Sub key={item.label}>
+          <Menu.Sub.Target>
+            <Menu.Sub.Item leftSection={leftSectionFor(item)}>{item.label}</Menu.Sub.Item>
+          </Menu.Sub.Target>
+          <Menu.Sub.Dropdown>{renderItems(item.submenu, close)}</Menu.Sub.Dropdown>
+        </Menu.Sub>
       )
     }
 

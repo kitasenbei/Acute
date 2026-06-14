@@ -13,8 +13,8 @@
     "start": "npm run build:backend && npm run build && cross-env NODE_ENV=production electron ."
   },
   "dependencies": {
-    "@mantine/core": "^7.13.4",
-    "@mantine/hooks": "^7.13.4",
+    "@mantine/core": "^8.3.18",
+    "@mantine/hooks": "^8.3.18",
     "@monaco-editor/react": "^4.7.0",
     "@tabler/icons-react": "^3.21.0",
     "@tanstack/react-virtual": "^3.14.2",
