@@ -5,8 +5,13 @@ contextBridge.exposeInMainWorld('env', {
   apiBaseUrl: 'http://localhost:3001',
 })
 
+// The browsing root's absolute path, fetched once (synchronously) so the
+// renderer can build local file:// URIs for drag-out without an async round-trip.
+const rootDir = ipcRenderer.sendSync('native:rootDir')
+
 // Native file actions handled by the main process via the OS shell.
 contextBridge.exposeInMainWorld('native', {
+  rootDir,
   // Open a file with the OS default app (e.g. a .js in your default editor).
   openPath: (relPath) => ipcRenderer.invoke('native:openPath', relPath),
   // Reveal the item in the system file manager.

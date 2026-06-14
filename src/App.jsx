@@ -890,9 +890,17 @@ export default function App() {
       e.dataTransfer.effectAllowed = 'copyMove'
       e.dataTransfer.setData('text/plain', paths.join('\n'))
 
-      // Real file copy-out into other apps: a single file (or folder) is exposed
-      // as a downloadable URL with its MIME + name, so the OS/other app saves a
-      // real copy (matching its type) instead of just receiving the path text.
+      // Drag-out into native apps (file managers like PCManFM, etc.) read
+      // text/uri-list with local file:// URIs to copy the real file(s).
+      const root = window.native?.rootDir
+      if (root) {
+        const base = root.replace(/\/+$/, '')
+        const toUri = (p) =>
+          'file://' + `${base}/${p}`.split('/').map((seg, i) => (i === 0 ? seg : encodeURIComponent(seg))).join('/')
+        e.dataTransfer.setData('text/uri-list', paths.map(toUri).join('\r\n') + '\r\n')
+      }
+
+      // Also expose a single file as a downloadable URL (Chromium drop targets).
       if (paths.length === 1 && entry.type !== 'dir') {
         const name = paths[0].split('/').pop() || 'file'
         e.dataTransfer.setData('DownloadURL', `${mimeForName(name)}:${name}:${api.contentUrl(paths[0])}`)

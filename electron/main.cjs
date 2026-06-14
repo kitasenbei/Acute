@@ -123,6 +123,10 @@ ipcMain.handle('native:showInFolder', (_e, relPath) => {
 })
 // Resolve a root-relative path to its absolute on-disk path (for "Copy path").
 ipcMain.handle('native:resolvePath', (_e, relPath) => resolveInRoot(relPath))
+// The browsing root, returned synchronously so preload can expose it at load.
+ipcMain.on('native:rootDir', (e) => {
+  e.returnValue = ROOT_DIR
+})
 // Copy to the OS clipboard: a single image goes on as a bitmap (so chat apps can
 // paste it); otherwise the file path(s) go on as text. Returns what was written.
 ipcMain.handle('native:copyToClipboard', (_e, relPaths) => {
