@@ -26,6 +26,7 @@ import { usePreviewStore } from '../stores/previewStore.js'
 import { FileDetails } from './FileDetails.jsx'
 import { VideoPlayer } from './VideoPlayer.jsx'
 import { AudioPlayer } from './AudioPlayer.jsx'
+import { ImageViewer } from './ImageViewer.jsx'
 
 // Monaco is heavy — load it only when a code file is actually previewed.
 const CodePreview = lazy(() => import('./CodePreview.jsx'))
@@ -100,15 +101,7 @@ function PreviewBody({ entry, nav }) {
   const url = api.contentUrl(entry.path)
   switch (fileKind(entry)) {
     case 'image':
-      return (
-        <Center p="md">
-          <img
-            src={url}
-            alt={entry.name}
-            style={{ maxWidth: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: 8 }}
-          />
-        </Center>
-      )
+      return <ImageViewer src={url} alt={entry.name} />
     case 'video':
       return <VideoPlayer src={url} path={entry.path} />
     case 'audio':
