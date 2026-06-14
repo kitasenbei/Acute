@@ -140,6 +140,10 @@ export function PreviewModal() {
   const prev = usePreviewStore((s) => s.prev)
   const nav = { onPrev: prev, onNext: next, hasPrev: index > 0, hasNext: index < playlist.length - 1 }
 
+  // Blend the header into the video's black letterbox bands.
+  const videoMode = entry ? fileKind(entry) === 'video' : false
+  const iconColor = videoMode ? 'gray.3' : 'gray'
+
   return (
     <Modal
       opened={isOpen}
@@ -160,16 +164,20 @@ export function PreviewModal() {
             gap="sm"
             px="md"
             h={52}
-            style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+            style={{
+              flexShrink: 0,
+              background: videoMode ? '#000' : undefined,
+              borderBottom: videoMode ? '1px solid #000' : '1px solid var(--mantine-color-default-border)',
+            }}
           >
-            <Text size="sm" fw={600} truncate>
+            <Text size="sm" fw={600} truncate c={videoMode ? 'gray.3' : undefined}>
               {entry.name}
             </Text>
             <Group gap={4} wrap="nowrap">
               <Tooltip label="Details" openDelay={400}>
                 <ActionIcon
                   variant={showDetails ? 'light' : 'subtle'}
-                  color="gray"
+                  color={iconColor}
                   onClick={toggleDetails}
                 >
                   <IconInfoCircle size={18} />
@@ -178,23 +186,23 @@ export function PreviewModal() {
               {native && (
                 <>
                   <Tooltip label="Open with default app" openDelay={400}>
-                    <ActionIcon variant="subtle" color="gray" onClick={() => native.openPath(entry.path)}>
+                    <ActionIcon variant="subtle" color={iconColor} onClick={() => native.openPath(entry.path)}>
                       <IconExternalLink size={18} />
                     </ActionIcon>
                   </Tooltip>
                   <Tooltip label="Reveal in file manager" openDelay={400}>
-                    <ActionIcon variant="subtle" color="gray" onClick={() => native.showInFolder(entry.path)}>
+                    <ActionIcon variant="subtle" color={iconColor} onClick={() => native.showInFolder(entry.path)}>
                       <IconFolderOpen size={18} />
                     </ActionIcon>
                   </Tooltip>
                 </>
               )}
               <Tooltip label="Download" openDelay={400}>
-                <ActionIcon variant="subtle" color="gray" onClick={() => api.download(entry)}>
+                <ActionIcon variant="subtle" color={iconColor} onClick={() => api.download(entry)}>
                   <IconDownload size={18} />
                 </ActionIcon>
               </Tooltip>
-              <ActionIcon variant="subtle" color="gray" onClick={close}>
+              <ActionIcon variant="subtle" color={iconColor} onClick={close}>
                 <IconX size={18} />
               </ActionIcon>
             </Group>
