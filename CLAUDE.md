@@ -1,186 +1,167 @@
-# Acute — a file explorer (Electron + React + Mantine + a TS backend)
+# Acute
 
-This file captures the architecture and the **conventions + hard-won lessons**
-of this codebase. Read it before extending the app — most of the rules below
-exist because the naive approach bit us.
+A desktop file explorer: **Electron** shell, **React + Mantine** renderer, and a
+standalone **TypeScript/Express** backend that does all filesystem work. This
+file is the orientation for working in this repo — read it before adding
+features, then follow the conventions below.
 
-## Shape of the app
+## Run / build / test
 
-- **Electron shell** (`electron/`) — `main.cjs` spawns the backend as a child
-  process and creates the window; `preload.cjs` is the only bridge to native
-  capability.
-- **Backend** (`backend/`) — a standalone TypeScript Express server, strict
-  **3-tier** architecture, SQLite for persistence, runs as its own OS process.
-- **Renderer** (`src/`) — React + Mantine UI, Vite-built, **zustand** for all
-  cross-cutting state. Talks to the backend over HTTP (`src/api.js`).
+```bash
+npm install                 # root (renderer + electron)
+npm run dev                 # builds backend, starts Vite + Electron (renderer HMR)
+npm start                   # production build + launch
+npm run build               # renderer only (Vite)
 
-The renderer never touches the filesystem directly. It either calls the backend
-(browsing, thumbnails, tags) or the Electron `preload` bridge (`window.native`
-for "open with default app" / "reveal in folder").
+cd backend
+npm install
+npm test                    # vitest
+npm run typecheck           # tsc -p tsconfig.test.json
+npm run build               # tsc -> backend/dist
+```
+
+Backend runs from `backend/dist` (compiled), so **it is not hot-reloaded**.
+After editing `backend/` or `electron/`, restart `npm run dev`. Renderer edits
+HMR live.
+
+## Layout
+
+```
+electron/        main.cjs (spawns backend, creates window), preload.cjs (window.native bridge)
+backend/src/     3-tier server (see below); dist/ is the built output it runs from
+src/             React renderer
+  api.js         single HTTP client to the backend
+  fileTypes.js   file-kind classification (image/video/audio/pdf/code/text)
+  stores/        zustand stores, one per concern
+  components/    UI; modals live at the app root
+```
+
+The renderer never touches the filesystem. It calls the backend over HTTP, or
+the Electron bridge (`window.native`) for OS actions (open-with-default-app,
+reveal-in-folder).
 
 ---
 
-## Backend design
+## Backend architecture
 
-### 3-tier, dependency-injected, testable
-Every feature is the same four layers, wired in `app.ts` via a `createApp({...})`
-factory that takes its dependencies as arguments:
+Strict **3-tier**, dependency-injected. Every feature is the same shape:
 
 ```
-routes → controller (HTTP only) → service (business rules) → repository / fs (data)
+routes/ → controller (HTTP only) → service (business rules) → repository|fs (data)
 ```
 
-- **Controllers** translate HTTP ↔ service calls and own nothing else. Async
-  handlers are wrapped (`const wrap = fn => (req,res,next) => fn(...).catch(next)`)
-  so rejected promises always reach the error middleware.
-- **Services** hold all rules and speak only in domain terms (root-relative
-  paths, never absolute). They're framework-agnostic and unit-tested directly.
-- **Repositories / fs adapters** are the only code that knows SQL or `node:fs`.
-  Repositories map snake_case rows ↔ camelCase domain objects.
-- **`createApp` takes deps** (`db`, `rootDir`, `cacheDir`) so tests pass an
-  in-memory SQLite DB + a temp dir and exercise the real stack with no mocks.
-  See `tests/helpers.ts` (`makeTestStack`).
+`app.ts` is a `createApp({ db, rootDir, cacheDir })` factory: it constructs each
+tier and injects dependencies. Tests call it with an in-memory DB + temp dirs.
 
-### Conventions that paid off
-- **Custom error classes** (`AppError`/`ValidationError`/`NotFoundError`) carry a
-  `statusCode`; one error middleware maps them to 400/404/500. Services throw,
-  controllers stay clean.
-- **Path confinement is a single chokepoint.** `PathResolver` converts
-  root-relative ↔ absolute and rejects anything escaping the root. Every absolute
-  path handed to `fs` goes through it. The Electron main process re-implements the
-  *same* guard before `shell.openPath`, and `main` + backend must agree on
-  `ROOT_DIR` (main passes it into the child's env).
-- **Recursive data via SQLite CTEs.** Subtags use a self-referencing
-  `parent_id` (adjacency list) with `ON DELETE SET NULL` (deleting a parent
-  promotes children, no surprise data loss). Filtering "by tag" unions the whole
-  subtree with a `WITH RECURSIVE` CTE — clean and fast. Cycle prevention lives in
-  the service (reject parenting under self or a descendant).
-- **Migrations are idempotent + additive.** `CREATE TABLE IF NOT EXISTS` for
-  fresh DBs, plus a `PRAGMA table_info` check to `ALTER TABLE ADD COLUMN` for
-  existing ones. Enable `PRAGMA foreign_keys = ON` for cascade/set-null to work.
-- **Tests are hermetic.** In-memory DB + `os.tmpdir()` scratch dirs, cleaned in
-  `afterEach`. 39 tests, no fixtures left on disk. Run `npm test` / `npm run
-  typecheck` in `backend/` before committing backend changes.
-- **Swagger spec is hand-written** (`openapi.ts`) so the whole contract is
-  reviewable in one file; served at `/api/docs`.
+**Layer responsibilities — keep them strict:**
+- **Controller** maps HTTP ↔ service calls, nothing else. Wrap async handlers so
+  rejections reach the error middleware: `const wrap = fn => (req,res,next) => fn(...).catch(next)`.
+- **Service** owns all rules and validation; speaks only in **root-relative
+  paths** and domain objects. No HTTP, no `fs`, no SQL. This is the unit-tested layer.
+- **Repository / fs adapter** is the only place with SQL or `node:fs`.
+  Repositories translate snake_case rows ↔ camelCase domain objects.
 
-### Backend gotchas learned here
-- **HTTP headers must be ASCII.** `Content-Disposition: filename="<unicode>"`
-  throws `ERR_INVALID_CHAR`. Use RFC 5987: `filename*=UTF-8''<encoded>` + an
-  ASCII-stripped fallback. This silently broke every thumbnail for files with
-  accented/emoji names.
-- **Heavy work belongs in the backend process, not the renderer.** Thumbnails are
-  generated by `sharp` (images) / `ffmpeg` poster frames (video), cached to disk
-  keyed by `absPath + mtime + size`, and served as tiny WebP. This moved decode
-  off the renderer's main thread entirely (see frontend perf below).
-- Native deps: `better-sqlite3`/`sharp` are built for **Node's** ABI. The backend
-  must run under **system Node**, not Electron's runtime (see Electron gotchas).
+**To add an endpoint:** add the method to the service (with tests), expose it on
+the controller, register the route in `routes/index.ts`, wire any new
+dependency in `createApp`, and add it to `openapi.ts`.
+
+**Conventions / invariants (do not break):**
+- **Errors:** throw `AppError`/`ValidationError`/`NotFoundError` (carry
+  `statusCode`); the one error middleware maps them to JSON + status. Services
+  throw; controllers don't build error responses.
+- **Path safety is one chokepoint:** `PathResolver` converts root-relative ↔
+  absolute and rejects escapes. Every absolute path given to `fs` goes through
+  it. `ROOT_DIR` confines all browsing (defaults to home; `electron/main.cjs`
+  passes it to the backend and re-applies the same guard before `shell.openPath`).
+- **Persistence:** SQLite via `better-sqlite3`. Migrations are idempotent +
+  additive (`CREATE TABLE IF NOT EXISTS`; for new columns, check `PRAGMA
+  table_info` then `ALTER TABLE ADD COLUMN`). Enable `PRAGMA foreign_keys = ON`.
+  Hierarchies use an adjacency list (`parent_id`) and recursive CTEs for subtree
+  queries; cycle checks live in the service.
+- **Tests are hermetic:** in-memory SQLite + `os.tmpdir()` scratch dirs cleaned in
+  `afterEach` (`tests/helpers.ts`). No fixtures on disk. Keep `npm test` green.
+- **HTTP headers must be ASCII.** For filenames in `Content-Disposition`, use RFC
+  5987 (`filename*=UTF-8''<encoded>`) plus an ASCII fallback.
+- **CPU-heavy work is the backend's job, not the renderer's.** Image/video
+  thumbnails are generated server-side (`sharp` / `ffmpeg` poster frame), cached
+  to disk keyed by `absPath+mtime+size`, served as small WebP.
+- **Native modules** (`better-sqlite3`, `sharp`) are built for Node's ABI →
+  the backend must run under **system Node**, never Electron's runtime.
+- API contract is hand-written in `openapi.ts`, served at `/api/docs`.
 
 ---
 
 ## Electron
 
-- `main.cjs` spawns `node backend/dist/server.js` (system Node — native modules
-  are built for Node's ABI, not Electron's). It passes `PORT`, `ROOT_DIR`,
-  `DATA_DIR` via env so the two processes agree.
-- **Always tear the child down.** Spawn with `stdio: ['ignore','pipe','pipe']`
-  (NOT `'inherit'` — an orphaned child holding the parent's stdio pipe hangs the
-  terminal forever). Kill the backend on `before-quit` **and** on `SIGINT/SIGTERM/
-  SIGHUP` + `process.exit`, so a signalled Electron never orphans it.
-- `preload.cjs` exposes a minimal `window.native` (openPath, showInFolder) and the
-  backend base URL. The renderer feature-detects `window.native` so it degrades in
-  a plain browser.
-- **Backend code is NOT hot-reloaded** — it runs from `backend/dist`. After
-  changing `backend/` or `electron/`, restart `npm run dev`. Renderer changes HMR.
-- A `SKIP_BACKEND=1` env lets you run the backend yourself for debugging.
+- `main.cjs` spawns `node backend/dist/server.js` (system Node) and passes
+  `PORT`, `ROOT_DIR`, `DATA_DIR` via env so both processes agree.
+- Spawn with `stdio: ['ignore','pipe','pipe']` (never `'inherit'`), and kill the
+  child on `before-quit` and on `SIGINT/SIGTERM/SIGHUP` + `process.exit` so it
+  never orphans.
+- `preload.cjs` exposes a minimal `window.native` and the backend URL via
+  `contextBridge`. Renderer feature-detects `window.native` (degrades in a plain
+  browser). Keep `contextIsolation: true`, `nodeIntegration: false`.
 
 ---
 
-## Frontend UI paradigms
+## Frontend architecture
 
 ### State: zustand, one store per concern
-Stores are small and single-purpose, persisted only where it makes sense:
+- Stores are small and single-purpose: `settingsStore`, `viewStore`,
+  `playerStore`, `tagsStore`, `previewStore`, `contextMenuStore`. Persist only
+  preferences (via `persist` + `partialize`), not transient UI state.
+- **The backend is the source of truth.** Stores that mirror server data
+  (`tagsStore`) re-fetch after mutations rather than diverging optimistically.
+- New cross-cutting state → a new (or existing) store, not prop-drilling.
 
-- `settingsStore` (appearance/theme — persisted), `viewStore` (mode, zoom,
-  showHidden, sort — persisted), `playerStore` (volume/mute — persisted),
-  `tagsStore` (tags + assignments, mirrors backend), `previewStore`,
-  `contextMenuStore` (ephemeral).
-- **Backend is the source of truth; stores mirror it** and re-fetch after
-  mutations (`tagsStore.reloadTags/reloadAssignments`) so every view stays
-  consistent. Don't optimistically diverge.
-- **Theme is driven by zustand, rendered by Mantine.** A tiny `ThemeSync`
-  component pushes the store's `appearance` into Mantine's color scheme. Mantine
-  owns the CSS variables; we never hardcode theme colors (see theming below).
+### Components
+- **Modals live at the app root** (`main.jsx`) and open via store flags
+  (`open()/close()`), never threaded through props.
+- **Build generic, data-driven UI.** Example: one shared `ContextMenu` renders
+  whatever item list a store holds (`{label, icon?, dot?, color?, checked?,
+  onClick}` or `{divider}`); the caller decides the items. Anchor a Mantine
+  `Menu` to a 0×0 element at the cursor for positioning + click-outside.
+- **Prefer arrays where multiple is plausible** (`FileDetails` takes `files[]`)
+  so features like multi-select don't require rewrites.
+- File handling routes off `fileTypes.js#fileKind`; add new extensions/kinds there.
 
-### Generic, reusable UI driven by data
-- **One shared `ContextMenu`** reads `{x, y, items}` from a store; callers build
-  the item list (`{label, icon?, dot?, color?, checked?, onClick}`). The menu is
-  dumb; the explorer decides the actions per entry. Anchor it to a 0×0 element at
-  the cursor inside a Mantine `Menu` to get positioning + click-outside for free.
-- **Modals live at the app root** (`SettingsModal`, `PreviewModal`,
-  `TagManagerModal`) and are opened via store flags — not threaded through props.
-- **Components take data, not single items where multi is plausible.**
-  `FileDetails` takes a `files[]` array (multi-select ready), `TagChips`/
-  `SidebarTagTree` take the tag list, etc.
+### Theming — use Mantine variables
+- Theme is driven by a zustand setting and applied by Mantine; a `ThemeSync`
+  component pushes the preference into Mantine's color scheme.
+- Style every surface with Mantine CSS variables (`--mantine-color-default-hover`
+  for hover/selection, `--mantine-color-default-border`, `c="dimmed"`, etc.) so
+  light/dark flips automatically. Only hardcode colors that are intentionally
+  theme-independent (e.g. a media player's black stage, user-chosen tag colors).
+- A full skin (alternate theme) = a class on `<html>` + a scoped stylesheet that
+  **redefines Mantine CSS variables**, rather than overriding inline styles.
 
-### Theming
-- Use Mantine theme CSS variables for every surface: `--mantine-color-default-hover`
-  (hover/selection bg), `--mantine-color-default-border`, `c="dimmed"`, etc. They
-  flip with light/dark automatically.
-- Hardcoded colors are reserved for things that are *intentionally* theme-
-  independent (the video player's black stage, user-chosen tag colors, the play
-  badge over media). Don't hardcode chrome colors.
-- A theme override (e.g. the experimental XP skin) is best done by adding a class
-  to `<html>` and a scoped stylesheet that **redefines Mantine CSS variables**
-  (e.g. scope `--mantine-color-default-hover` inside a panel so inline `var(...)`
-  highlights recolor) rather than fighting inline styles with `!important`.
+### Performance — required for big directories
+A folder can hold thousands of entries; the listing must stay smooth. Rules:
+1. **Virtualize** the entry list (`VirtualEntries`, `@tanstack/react-virtual`).
+   Use a plain scrollable `<div>` as the scroll parent (not Mantine `ScrollArea`,
+   whose Radix wrapper breaks windowing offsets). Keep transient UI out of the
+   scroll viewport so offsets start at 0.
+2. **Memoize rows** (`React.memo`) **with referentially stable props**: all
+   handlers via `useCallback`, derived values via `useMemo`, shared constants for
+   empty arrays. This is what makes memo actually skip re-renders during scroll.
+3. **Render hover-only chrome conditionally** (row action buttons mount on hover),
+   keeping the slot's width reserved to avoid layout shift.
+4. **Keep media elements mounted and load small assets** (backend WebP thumbnails
+   via `<img loading="lazy" decoding="async">`). Don't swap elements on scroll.
+5. **Lazy-load heavy deps.** Monaco (code preview) is `React.lazy` + `Suspense`,
+   bundled locally for offline Electron (`monacoSetup.js`: `loader.config({ monaco })`
+   + Vite `?worker` imports), so its large chunk only loads on demand.
 
-### Performance (this is where the real lessons are)
-Listing a directory of thousands of files must stay smooth. The fixes, in order
-of impact:
-
-1. **Virtualize the list** (`VirtualEntries` + `@tanstack/react-virtual`). Only
-   visible rows mount. Use a **plain scrollable `<div>`** as the scroll parent —
-   Mantine `ScrollArea` wraps content in a Radix `display:table` element that
-   throws off windowing offsets. Lift transient UI (the new-folder input) *out*
-   of the scroll viewport so windowing offsets start at 0.
-2. **Memoize rows + stable props.** `React.memo(EntryRow/EntryTile)` only helps if
-   their props are referentially stable across the virtualizer's per-scroll
-   re-renders. So all `on*` handlers are `useCallback`, derived values are
-   `useMemo`, and untagged rows share one frozen `EMPTY_TAGS` array. Then a scroll
-   gesture re-renders *zero* existing rows — only newly-entering ones mount.
-3. **Mount hover-only chrome on hover.** Row action buttons (Tooltips +
-   ActionIcons — not cheap) render only when `hover` is true; the slot keeps its
-   width reserved so there's no layout shift. Newly-visible rows are just
-   thumbnail + name.
-4. **Keep media elements mounted; load tiny assets.** Thumbnails are small backend
-   WebPs in a plain `<img loading="lazy" decoding="async">` that stays mounted.
-   - Anti-lesson: an `isScrolling`-gated icon↔img swap *unmounted/remounted* the
-     `<img>` on every micro-scroll → constant refetch/flicker. Removed it.
-   - Anti-lesson: full-resolution `<img>`/`<video>` thumbnails decoded on the main
-     thread were the original jank; the backend thumbnail service fixed that.
-
-### Heavy editors / lazy loading
-- Monaco (code preview) is **`React.lazy` + `Suspense`**, so its ~3 MB chunk only
-  loads when a code file is opened. It's bundled **locally** (`monacoSetup.js`
-  configures `loader.config({ monaco })` + Vite `?worker` imports) so it works
-  offline in Electron — no CDN.
-- File-type routing lives in `fileTypes.js` (`fileKind` → image/video/audio/pdf/
-  code/text/other). `.txt`-ish text uses the lightweight `<pre>` viewer; code uses
-  Monaco. One place decides; the preview switches on `kind`.
-
-### Small UX conventions
-- Custom media players (`VideoPlayer`, `AudioPlayer`) replace native controls:
-  fill the stage so small media scales up, controls fade on hover, volume is
-  wheel-adjustable with a padded hit zone, and volume persists via `playerStore`.
-- Hit areas matter: make whole rows clickable (sidebar tag tree toggles on row
-  click, not just the chevron) and pad small controls.
+### Media / interaction conventions
+- Custom players replace native controls (fill the stage, controls fade on hover,
+  wheel-adjustable volume with a padded hit zone, volume persisted in
+  `playerStore`). Make whole rows clickable and pad small hit targets.
 
 ---
 
-## Workflow notes
-- Commits: brief, **gitmoji**-prefixed, body lists features added/changed.
-- Git identity is the machine's global (`kitasenbei` GitHub no-reply). **Don't set
-  a local `user.email`** — if one already resolves globally, leave it alone.
-- Run `npm run build` (renderer) and `backend/ npm test && npm run typecheck`
-  before committing the respective side.
+## Workflow
+- Commit per feature; **gitmoji**-prefixed subject; body lists what changed.
+- Git identity is the machine's global config — don't set a per-repo
+  `user.email`.
+- Before committing: renderer → `npm run build`; backend → `npm test` +
+  `npm run typecheck`.
