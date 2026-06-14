@@ -1,5 +1,5 @@
-import { Flex, Text, ColorSwatch, Box } from '@mantine/core'
-import { IconChevronRight } from '@tabler/icons-react'
+import { Flex, Text, Box } from '@mantine/core'
+import { IconChevronRight, IconTagFilled } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useTagsStore, buildTagTree } from '../stores/tagsStore.js'
 
@@ -49,7 +49,7 @@ function TagNode({ tag, depth, tree, activeTagId, onSelect }) {
         ) : (
           <Box w={20} />
         )}
-        <ColorSwatch color={tag.color} size={11} />
+        <IconTagFilled size={14} color={tag.color} style={{ flexShrink: 0 }} />
         <Text size="sm" truncate style={{ flex: 1 }}>
           {tag.name}
         </Text>
