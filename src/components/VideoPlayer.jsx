@@ -93,18 +93,15 @@ export function VideoPlayer({ src, path }) {
   const onScrubMove = useCallback((e) => {
     const s = scrubRef.current
     if (!s) return
-    // Pulling the cursor up from the bar scales horizontal movement down.
+    // Time follows the cursor directly, so bar / timestamp / preview all agree.
     const distAbove = Math.max(0, s.rect.top - e.clientY)
-    const precision = 1 + distAbove / 55
-    const dx = e.clientX - s.lastX
-    s.lastX = e.clientX
-    s.time = Math.min(s.duration, Math.max(0, s.time + ((dx / s.rect.width) * s.duration) / precision))
+    const ratio = Math.min(1, Math.max(0, (e.clientX - s.rect.left) / s.rect.width))
+    s.time = ratio * s.duration
     const v = videoRef.current
     if (v) v.currentTime = s.time
     setCurrent(s.time)
-    // The visible scrubber follows the cursor, not the (precise) time.
-    setScrubX(Math.min(1, Math.max(0, (e.clientX - s.rect.left) / s.rect.width)))
-    setSeekHover({ x: (s.time / s.duration) * s.rect.width, w: s.rect.width, time: s.time, dragging: true, precise: distAbove > 30 })
+    setScrubX(ratio)
+    setSeekHover({ x: ratio * s.rect.width, w: s.rect.width, time: s.time, dragging: true, precise: distAbove > 30 })
   }, [])
 
   const onScrubEnd = useCallback(() => {
