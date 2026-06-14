@@ -209,7 +209,7 @@ function NameField({ entry, onCommit, onCancel }) {
 }
 
 const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onDelete, onTogglePin, onContextMenu }) {
+  onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
   const base = compact ? 24 : 32
@@ -283,20 +283,13 @@ const EntryRow = memo(function EntryRow({ entry, editing, pinned, compact, zoom 
             </ActionIcon>
           </Tooltip>
         )}
-        {hover && (
-          <Tooltip label="Delete" openDelay={400}>
-            <ActionIcon variant="subtle" color="red" onClick={() => onDelete(entry)}>
-              <IconTrash size={16} />
-            </ActionIcon>
-          </Tooltip>
-        )}
       </Group>
     </Flex>
   )
 })
 
 const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, selected, tags, onOpen, onOpenFile, onStartEdit, onCommitEdit, onCancelEdit,
-  onDelete, onTogglePin, onContextMenu }) {
+  onTogglePin, onContextMenu }) {
   const [hover, setHover] = useState(false)
   const isDir = entry.type === 'dir'
   const thumbSize = Math.round(64 * zoom)
@@ -336,9 +329,6 @@ const EntryTile = memo(function EntryTile({ entry, editing, pinned, zoom = 1, se
           )}
           <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => onStartEdit(entry.path)}>
             <IconPencil size={14} />
-          </ActionIcon>
-          <ActionIcon variant="subtle" color="red" size="sm" onClick={() => onDelete(entry)}>
-            <IconTrash size={14} />
           </ActionIcon>
         </Group>
       )}
@@ -668,7 +658,6 @@ export default function App() {
     [openPreview, entries],
   )
   const handleCancelEdit = useCallback(() => setEditingPath(null), [])
-  const handleDelete = useCallback((e) => run(() => api.remove(e.path)), [run])
   const handleContextMenu = useCallback(
     (e, ev) => {
       ev.preventDefault()
@@ -757,7 +746,6 @@ export default function App() {
     onStartEdit: setEditingPath,
     onCommitEdit: commitRename,
     onCancelEdit: handleCancelEdit,
-    onDelete: handleDelete,
     onTogglePin: togglePin,
     onContextMenu: handleContextMenu,
   })
