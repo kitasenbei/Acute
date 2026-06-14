@@ -5,8 +5,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--mantine-color-gray-6), var(--mantine-color-gray-8));
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  background: linear-gradient(135deg, var(--mantine-color-default-hover), var(--mantine-color-default-border));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .audio-eq {
@@ -20,7 +20,7 @@
   display: block;
   width: 6px;
   height: 40px;
-  background: #fff;
+  background: var(--mantine-color-dimmed);
   border-radius: 3px;
   transform-origin: bottom;
   animation: audio-eq-bounce 0.9s ease-in-out infinite;
